@@ -1,0 +1,483 @@
+<!DOCTYPE html>
+<html lang="fr">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>MYM Live - Contrôle</title>
+    <style>
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto",
+          "Helvetica", "Arial", sans-serif;
+        padding: 0;
+        margin: 0;
+        min-width: 350px;
+        background: #020408;
+      }
+
+      .popup-container {
+        background: #020408;
+        border-radius: 12px;
+        padding: 20px;
+      }
+
+      .popup-header {
+        text-align: center;
+        margin-bottom: 20px;
+        padding-bottom: 15px;
+        border-bottom: 2px solid #1a1a1a;
+      }
+
+      .popup-header h1 {
+        margin: 0;
+        font-size: 20px;
+        font-weight: 700;
+        background: linear-gradient(135deg, #8b9bff 0%, #9b7bd5 100%);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
+      }
+
+      .popup-header p {
+        margin: 5px 0 0 0;
+        font-size: 12px;
+        color: #888;
+      }
+
+      .row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 12px 0;
+        border-bottom: 1px solid #1a1a1a;
+      }
+
+      .row:last-child {
+        border-bottom: none;
+      }
+
+      .label {
+        font-weight: 600;
+        font-size: 14px;
+        color: #e0e0e0;
+      }
+
+      .hint {
+        font-size: 11px;
+        color: #888;
+        margin-top: 4px;
+      }
+
+      .toggle {
+        width: 48px;
+        height: 26px;
+        background: #e0e0e0;
+        border-radius: 13px;
+        position: relative;
+        cursor: pointer;
+        transition: background 0.3s;
+        opacity: 0.3;
+      }
+
+      .toggle.on {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        opacity: 1;
+      }
+
+      .knob {
+        width: 20px;
+        height: 20px;
+        background: white;
+        border-radius: 50%;
+        position: absolute;
+        top: 3px;
+        left: 3px;
+        transition: left 0.3s;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+      }
+
+      .on .knob {
+        left: 25px;
+      }
+
+      .section-divider {
+        margin: 16px 0;
+        border: none;
+        border-top: 2px solid #1a1a1a;
+      }
+
+      /* Auth Section */
+      .auth-section {
+        background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+        border-radius: 8px;
+        padding: 16px;
+        margin-top: 10px;
+      }
+
+      .auth-title {
+        font-size: 14px;
+        font-weight: 700;
+        color: #9b7bd5;
+        margin-bottom: 8px;
+      }
+
+      .auth-hint {
+        font-size: 12px;
+        color: #b8b8b8;
+        line-height: 1.5;
+        margin-bottom: 12px;
+      }
+
+      .auth-form {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+      }
+
+      .auth-form input {
+        padding: 10px 12px;
+        border: 1px solid #333;
+        border-radius: 6px;
+        background: #0a0a0a;
+        color: #e0e0e0;
+        font-size: 13px;
+      }
+
+      .auth-form input:focus {
+        outline: none;
+        border-color: #9b7bd5;
+      }
+
+      .btn-google {
+        background: white;
+        color: #333;
+        border: none;
+        padding: 10px 16px;
+        border-radius: 6px;
+        font-size: 13px;
+        font-weight: 600;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        transition: background 0.2s;
+      }
+
+      .btn-google:hover {
+        background: #f5f5f5;
+      }
+
+      .btn-google:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+      }
+
+      .divider {
+        display: flex;
+        align-items: center;
+        text-align: center;
+        margin: 12px 0;
+      }
+
+      .divider::before,
+      .divider::after {
+        content: "";
+        flex: 1;
+        border-bottom: 1px solid #333;
+      }
+
+      .divider span {
+        padding: 0 10px;
+        color: #666;
+        font-size: 12px;
+      }
+
+      /* User Section */
+      .user-section {
+        background: linear-gradient(135deg, #1a2e1a 0%, #163e16 100%);
+        border-radius: 8px;
+        padding: 16px;
+        margin-top: 10px;
+      }
+
+      .user-info {
+        margin-bottom: 12px;
+      }
+
+      .user-email {
+        font-size: 13px;
+        color: #b8b8b8;
+        margin-bottom: 8px;
+        word-break: break-all;
+      }
+
+      .subscription-badge {
+        display: inline-block;
+        padding: 4px 10px;
+        border-radius: 12px;
+        font-size: 11px;
+        font-weight: 600;
+      }
+
+      .subscription-badge.active {
+        background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+        color: white;
+      }
+
+      .subscription-badge.trial {
+        background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+        color: white;
+      }
+
+      .subscription-badge.inactive {
+        background: #333;
+        color: #999;
+      }
+
+      /* Buttons */
+      .btn-primary {
+        padding: 10px 20px;
+        border: none;
+        border-radius: 6px;
+        background: linear-gradient(135deg, #8b9bff 0%, #9b7bd5 100%);
+        color: white;
+        font-size: 13px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: transform 0.2s, box-shadow 0.2s;
+        width: 100%;
+      }
+
+      .btn-primary:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 4px 12px rgba(155, 123, 213, 0.4);
+      }
+
+      .btn-primary:active {
+        transform: translateY(0);
+      }
+
+      .btn-primary:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+      }
+
+      .btn-logout {
+        width: 100%;
+        padding: 8px 16px;
+        border: 1px solid #dc2626;
+        border-radius: 6px;
+        background: transparent;
+        color: #dc2626;
+        font-size: 12px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.2s;
+      }
+
+      .btn-logout:hover {
+        background: #dc2626;
+        color: white;
+      }
+
+      .status-message {
+        font-size: 11px;
+        margin-top: 8px;
+        padding: 8px;
+        border-radius: 6px;
+        text-align: center;
+      }
+
+      .status-message.error {
+        background: rgba(220, 38, 38, 0.1);
+        color: #dc2626;
+      }
+
+      .status-message.success {
+        background: rgba(16, 185, 129, 0.1);
+        color: #10b981;
+      }
+
+      .link-container {
+        margin-top: 12px;
+        text-align: center;
+      }
+
+      .link-container a {
+        color: #8b9bff;
+        text-decoration: none;
+        font-size: 12px;
+        font-weight: 600;
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        transition: color 0.2s;
+      }
+
+      .link-container a:hover {
+        color: #9b7bd5;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="popup-container">
+      <div class="popup-header">
+        <h1>MYM Chat Live</h1>
+        <p>Extension Premium pour MYM.fans</p>
+      </div>
+
+      <div class="row">
+        <div>
+          <div class="label">Chat Live</div>
+          <div class="hint">Injection automatique des messages</div>
+        </div>
+        <div
+          id="toggle"
+          class="toggle"
+          role="button"
+          tabindex="0"
+          aria-label="Toggle MYM Live"
+        >
+          <div class="knob"></div>
+        </div>
+      </div>
+
+      <div class="row">
+        <div>
+          <div class="label">Badges de revenus</div>
+          <div class="hint">Afficher les montants totaux</div>
+        </div>
+        <div
+          id="toggle-badges"
+          class="toggle"
+          role="button"
+          tabindex="0"
+          aria-label="Toggle Badges"
+        >
+          <div class="knob"></div>
+        </div>
+      </div>
+
+      <div class="row">
+        <div>
+          <div class="label">Box d'informations</div>
+          <div class="hint">Statistiques détaillées de l'utilisateur</div>
+        </div>
+        <div
+          id="toggle-stats"
+          class="toggle"
+          role="button"
+          tabindex="0"
+          aria-label="Toggle Statistics Box"
+        >
+          <div class="knob"></div>
+        </div>
+      </div>
+
+      <div class="row">
+        <div>
+          <div class="label">Picker d'émojis</div>
+          <div class="hint">Sélecteur d'émojis rapide</div>
+        </div>
+        <div
+          id="toggle-emoji"
+          class="toggle"
+          role="button"
+          tabindex="0"
+          aria-label="Toggle Emoji Picker"
+        >
+          <div class="knob"></div>
+        </div>
+      </div>
+
+      <div class="row">
+        <div>
+          <div class="label">Notes utilisateur</div>
+          <div class="hint">Prendre des notes sur vos fans</div>
+        </div>
+        <div
+          id="toggle-notes"
+          class="toggle"
+          role="button"
+          tabindex="0"
+          aria-label="Toggle User Notes"
+        >
+          <div class="knob"></div>
+        </div>
+      </div>
+
+      <hr class="section-divider" />
+
+      <!-- Section Authentification (affichée si non connecté) -->
+      <div id="auth-section" class="auth-section">
+        <div class="auth-title">🔐 Connexion</div>
+        <div class="auth-hint">
+          Connectez-vous avec votre compte pour activer toutes les
+          fonctionnalités Premium.
+        </div>
+        <div class="auth-form">
+          <input
+            id="emailInput"
+            placeholder="Email"
+            type="email"
+            autocomplete="email"
+          />
+          <input
+            id="passwordInput"
+            placeholder="Mot de passe"
+            type="password"
+            autocomplete="current-password"
+          />
+          <button id="loginBtn" class="btn-primary">Se connecter</button>
+          <div class="divider"><span>ou</span></div>
+          <button id="googleSignInBtn" class="btn-google">
+            <svg width="18" height="18" viewBox="0 0 18 18">
+              <path
+                fill="#4285F4"
+                d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844c-.209 1.125-.843 2.078-1.796 2.717v2.258h2.908c1.702-1.567 2.684-3.874 2.684-6.615z"
+              />
+              <path
+                fill="#34A853"
+                d="M9 18c2.43 0 4.467-.806 5.956-2.184l-2.908-2.258c-.806.54-1.837.86-3.048.86-2.344 0-4.328-1.584-5.036-3.711H.957v2.332C2.438 15.983 5.482 18 9 18z"
+              />
+              <path
+                fill="#FBBC05"
+                d="M3.964 10.707c-.18-.54-.282-1.117-.282-1.707s.102-1.167.282-1.707V4.961H.957C.347 6.175 0 7.55 0 9s.348 2.825.957 4.039l3.007-2.332z"
+              />
+              <path
+                fill="#EA4335"
+                d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0 5.482 0 2.438 2.017.957 4.958L3.964 7.29C4.672 5.163 6.656 3.58 9 3.58z"
+              />
+            </svg>
+            Continuer avec Google
+          </button>
+        </div>
+        <div id="authStatus" class="status-message" style="display: none"></div>
+        <div class="link-container">
+          <a
+            href="https://mym-extends-frontend.pages.dev/signin"
+            target="_blank"
+          >
+            <span>📝</span>
+            <span>Créer un compte</span>
+          </a>
+        </div>
+      </div>
+
+      <!-- Section Utilisateur connecté (affichée si connecté) -->
+      <div id="user-section" class="user-section" style="display: none">
+        <div class="user-info">
+          <div class="user-email">👤 <span id="userEmail"></span></div>
+          <div class="subscription-badge" id="subscriptionBadge"></div>
+        </div>
+        <button id="logoutBtn" class="btn-logout">Déconnexion</button>
+      </div>
+    </div>
+
+    <script src="popup.js"></script>
+  </body>
+</html>
