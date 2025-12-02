@@ -3,6 +3,26 @@ const API_BASE = "https://mymchat.fr";
 
 // 🌉 Écouter les messages du auth-bridge (connexion Google depuis le site web)
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  // 🔥 Nouveau: Support pour Firebase Token depuis la page web
+  if (message.type === "FIREBASE_TOKEN" && message.token) {
+    console.log("✅ Background: Received Firebase token from web");
+    
+    // Stocker le token
+    chrome.storage.local.set({ firebaseToken: message.token }, () => {
+      console.log("✅ Background: Firebase token stored");
+      
+      // Envoyer une réponse au content script
+      sendResponse({ success: true });
+      
+      // Fermer l'onglet d'authentification si c'est le sender
+      if (sender.tab && sender.tab.id) {
+        chrome.tabs.remove(sender.tab.id);
+      }
+    });
+    
+    return true; // Indique qu'on va répondre de manière asynchrone
+  }
+  
   if (message.type === "GOOGLE_AUTH_SUCCESS") {
     // console.log(
     //   "✅ Background: Received Google auth token from web",

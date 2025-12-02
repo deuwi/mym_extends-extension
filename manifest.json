@@ -1,12 +1,13 @@
 {
   "manifest_version": 3,
   "name": "MYM Chat Live",
-  "version": "1.2.6",
+  "version": "1.2.7",
   "description": "Injecte dynamiquement les nouveaux messages d'un chat MYM.",
   "permissions": ["storage"],
   "host_permissions": [
     "https://creators.mym.fans/*",
-    "https://mym-extends-frontend.pages.dev/*"
+    "https://mym-extends-frontend.pages.dev/*",
+    "https://mymchat.fr/*"
   ],
   "background": {
     "service_worker": "background.js"
@@ -35,6 +36,11 @@
         "https://mym-extends-frontend.pages.dev/*signin*",
         "https://mym-extends-frontend.pages.dev/*login*"
       ],
+      "js": ["auth-bridge.js"],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": ["https://mymchat.fr/*signin*", "https://mymchat.fr/*login*"],
       "js": ["auth-bridge.js"],
       "run_at": "document_idle"
     }

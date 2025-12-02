@@ -7,10 +7,35 @@ const isExtensionLogin = urlParams.get("redirect") === "extension";
 
 if (isExtensionLogin) {
   console.log(
-    "🔵 Auth Bridge: Extension login detected, monitoring localStorage..."
+    "🔵 Auth Bridge: Extension login detected, monitoring for token..."
   );
 
-  // Surveiller le localStorage pour détecter quand le token est ajouté
+  // Écouter les messages de la page web (Firebase Token)
+  window.addEventListener("message", (event) => {
+    // Vérifier que le message vient bien de notre domaine
+    if (event.origin !== window.location.origin) return;
+
+    if (event.data.type === "FIREBASE_TOKEN" && event.data.token) {
+      console.log("✅ Auth Bridge: Firebase token received from page!");
+      
+      // Envoyer le token à l'extension
+      chrome.runtime.sendMessage(
+        {
+          type: "FIREBASE_TOKEN",
+          token: event.data.token,
+        },
+        (response) => {
+          if (chrome.runtime.lastError) {
+            console.error("❌ Auth Bridge: Error sending message:", chrome.runtime.lastError);
+          } else {
+            console.log("✅ Auth Bridge: Token sent to extension:", response);
+          }
+        }
+      );
+    }
+  });
+
+  // Surveiller le localStorage pour détecter quand le token est ajouté (ancien système)
   const checkInterval = setInterval(async () => {
     const token = localStorage.getItem("access_token");
     const email = localStorage.getItem("user_email");

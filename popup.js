@@ -38,8 +38,8 @@
 
   // 🔄 Écouter les changements dans le storage (pour la connexion Google)
   chrome.storage.onChanged.addListener((changes, areaName) => {
-    if (areaName === "local" && changes.access_token) {
-      console.log("🔄 Token changed, refreshing UI...", changes.access_token);
+    if (areaName === "local" && (changes.access_token || changes.firebaseToken)) {
+      console.log("🔄 Token changed, refreshing UI...");
       // Attendre un peu que toutes les valeurs soient stockées
       setTimeout(() => {
         initializeAuth();
@@ -52,12 +52,14 @@
     chrome.storage.local.get(
       [
         "access_token",
+        "firebaseToken",
         "access_token_stored_at",
         "user_email",
         ...Object.values(toggles),
       ],
       (data) => {
-        const token = data.access_token;
+        // Priorité au firebaseToken, sinon access_token
+        const token = data.firebaseToken || data.access_token;
         const tokenTime = data.access_token_stored_at || 0;
         const now = Date.now();
         const ageMs = now - tokenTime;
@@ -67,7 +69,7 @@
           // Pas de token - afficher formulaire de connexion
           showAuthSection();
           disableAllToggles();
-        } else if (ageMs > ninetyDays) {
+        } else if (data.access_token && ageMs > ninetyDays) {
           // Token expiré mais on vérifie quand même l'abonnement
           // L'utilisateur devra peut-être se reconnecter
           verifyToken(token, data.user_email);
@@ -141,6 +143,53 @@
         element.style.opacity = "1";
         element.style.pointerEvents = "auto";
       }
+    });
+  }
+
+  // Fonction pour vérifier l'abonnement avec le token Firebase
+  async function checkSubscription() {
+    return new Promise((resolve) => {
+      chrome.storage.local.get(["firebaseToken", "access_token"], async (data) => {
+        const token = data.firebaseToken || data.access_token;
+        
+        if (!token) {
+          console.error("❌ Aucun token disponible");
+          showAuthSection();
+          disableAllToggles();
+          resolve();
+          return;
+        }
+
+        try {
+          const res = await fetch(API_BASE + "/api/check-subscription", {
+            headers: { Authorization: `Bearer ${token}` },
+          });
+
+          if (!res.ok) {
+            console.error("❌ Erreur API:", res.status);
+            showAuthSection();
+            disableAllToggles();
+            resolve();
+            return;
+          }
+
+          const result = await res.json();
+          console.log("✅ Abonnement vérifié:", result);
+          
+          // Stocker l'email si disponible
+          if (result.email) {
+            chrome.storage.local.set({ user_email: result.email });
+          }
+          
+          showUserSection(result.email, result);
+          resolve();
+        } catch (err) {
+          console.error("❌ Erreur vérification abonnement:", err);
+          showAuthSection();
+          disableAllToggles();
+          resolve();
+        }
+      });
     });
   }
 
@@ -283,10 +332,36 @@
   // Event listeners
   loginBtn.addEventListener("click", handleLogin);
   googleSignInBtn.addEventListener("click", () => {
-    // Rediriger vers le site web pour l'authentification Google
+    // Ouvrir un onglet pour l'authentification Google
     chrome.tabs.create({
       url: "https://mymchat.fr/signin?redirect=extension",
     });
+    
+    // Écouter les changements dans le storage pour détecter le nouveau token
+    const storageListener = (changes, areaName) => {
+      if (areaName === "local" && changes.firebaseToken) {
+        console.log("✅ Nouveau token Firebase détecté");
+        
+        // Vérifier l'abonnement avec ce token
+        checkSubscription().then(() => {
+          showStatus("✅ Connecté avec succès", "success");
+          setTimeout(() => {
+            hideStatus();
+            loadLoginStatus();
+          }, 1500);
+        });
+        
+        // Arrêter d'écouter
+        chrome.storage.onChanged.removeListener(storageListener);
+      }
+    };
+    
+    chrome.storage.onChanged.addListener(storageListener);
+    
+    // Nettoyer le listener après 60 secondes
+    setTimeout(() => {
+      chrome.storage.onChanged.removeListener(storageListener);
+    }, 60000);
   });
   logoutBtn.addEventListener("click", handleLogout);
 
@@ -341,15 +416,17 @@
   // 🔒 Vérifier le statut avant d'autoriser l'activation d'une feature
   async function checkSubscriptionBeforeToggle() {
     return new Promise((resolve) => {
-      chrome.storage.local.get(["access_token"], async (data) => {
-        if (!data.access_token) {
+      chrome.storage.local.get(["firebaseToken", "access_token"], async (data) => {
+        const token = data.firebaseToken || data.access_token;
+        
+        if (!token) {
           resolve(false);
           return;
         }
 
         try {
           const res = await fetch(API_BASE + "/api/check-subscription", {
-            headers: { Authorization: `Bearer ${data.access_token}` },
+            headers: { Authorization: `Bearer ${token}` },
           });
 
           if (!res.ok) {
