@@ -1,6 +1,6 @@
 // popup.js - Direct login authentication (no pairing codes)
 (function () {
-  const API_BASE = "https://mymextends-backend-production.up.railway.app";
+  const API_BASE = "https://mymchat.fr";
 
   const toggles = {
     toggle: "mym_live_enabled",
@@ -253,7 +253,7 @@
     );
 
     // Open website for login
-    chrome.tabs.create({ url: "https://mymextends.com" });
+    chrome.tabs.create({ url: "https://mymchat.fr" });
   }
 
   // Logout handler
@@ -285,7 +285,7 @@
   googleSignInBtn.addEventListener("click", () => {
     // Rediriger vers le site web pour l'authentification Google
     chrome.tabs.create({
-      url: "https://mym-extends-frontend.pages.dev/signin?redirect=extension",
+      url: "https://mymchat.fr/signin?redirect=extension",
     });
   });
   logoutBtn.addEventListener("click", handleLogout);

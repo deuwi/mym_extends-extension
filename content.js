@@ -62,7 +62,7 @@
   const POLL_INTERVAL_MS = 10000; // 10s (optimisé)
   const SUBSCRIPTION_CHECK_INTERVAL = 60 * 60 * 1000; // 1 heure
   const USER_INFO_CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
-  const API_BASE = "https://mymextends-backend-production.up.railway.app";
+  const API_BASE = "https://mymchat.fr";
 
   let knownChatIds = new Set();
   let knownListIds = new Set();
@@ -92,6 +92,30 @@
         });
 
         if (!res.ok) {
+          if (res.status === 401) {
+            // Token expiré, essayer de le rafraîchir
+            console.log("🔄 Token expiré lors de la vérification périodique, tentative de rafraîchissement...");
+            const refreshed = await tryRefreshToken(token);
+            if (!refreshed) {
+              // Si le rafraîchissement a échoué, déconnecter l'utilisateur
+              console.log("❌ Impossible de rafraîchir le token - Déconnexion de l'utilisateur");
+              await logoutUser();
+              return;
+            }
+            // Réessayer avec le nouveau token
+            const retryRes = await fetch(API_BASE + "/api/check-subscription", {
+              headers: { Authorization: `Bearer ${refreshed}` },
+            });
+            if (!retryRes.ok) {
+              showSubscriptionExpiredBanner();
+              return;
+            }
+            const retryData = await retryRes.json();
+            if (retryData.email_verified === false || (!retryData.subscription_active && retryData.trial_days_remaining <= 0)) {
+              showSubscriptionExpiredBanner();
+            }
+            return;
+          }
           showSubscriptionExpiredBanner();
           return;
         }
@@ -170,6 +194,26 @@
       console.error("❌ Error refreshing token:", err);
     }
     return null;
+  }
+
+  // Fonction pour déconnecter l'utilisateur
+  function logoutUser() {
+    return new Promise((resolve) => {
+      if (typeof window.chrome !== "undefined" && window.chrome.storage) {
+        // Supprimer le token et les données utilisateur
+        window.chrome.storage.local.remove(
+          ["access_token", "access_token_stored_at", "user_id", "user_email"],
+          () => {
+            console.log("🚪 Utilisateur déconnecté - Token expiré");
+            // Recharger la page pour réinitialiser l'extension
+            window.location.reload();
+            resolve();
+          }
+        );
+      } else {
+        resolve();
+      }
+    });
   }
 
   // Fonctions pour gérer les catégories d'utilisateurs
@@ -253,9 +297,11 @@
               return data.email_verified !== false;
             }
           }
+          // Si le rafraîchissement a échoué, déconnecter l'utilisateur
           console.log(
-            "❌ Token non reconnu par le backend - Vérifiez Railway logs"
+            "❌ Impossible de rafraîchir le token - Déconnexion de l'utilisateur"
           );
+          await logoutUser();
         }
         return false;
       }
@@ -304,7 +350,7 @@
     `;
     banner.innerHTML = `
       ⚠️ Votre abonnement MYM Chat Live Injector a expiré. 
-      <a href="https://mym-extends-frontend.pages.dev/pricing" target="_blank" style="color: white; text-decoration: underline; margin-left: 10px;">
+      <a href="https://mymchat.fr/pricing" target="_blank" style="color: white; text-decoration: underline; margin-left: 10px;">
         Renouveler maintenant
       </a>
     `;

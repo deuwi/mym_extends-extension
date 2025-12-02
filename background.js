@@ -1,5 +1,5 @@
 // background.js - Initialize default values on extension install
-const API_BASE = "https://mymextends-backend-production.up.railway.app";
+const API_BASE = "https://mymchat.fr";
 
 // 🌉 Écouter les messages du auth-bridge (connexion Google depuis le site web)
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
