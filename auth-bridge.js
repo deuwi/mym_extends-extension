@@ -17,16 +17,21 @@ if (isExtensionLogin) {
 
     if (event.data.type === "FIREBASE_TOKEN" && event.data.token) {
       console.log("✅ Auth Bridge: Firebase token received from page!");
-      
-      // Envoyer le token à l'extension
+
+      // Envoyer le token + email + user_id à l'extension
       chrome.runtime.sendMessage(
         {
           type: "FIREBASE_TOKEN",
           token: event.data.token,
+          user_email: event.data.user_email || "",
+          user_id: event.data.user_id || "",
         },
         (response) => {
           if (chrome.runtime.lastError) {
-            console.error("❌ Auth Bridge: Error sending message:", chrome.runtime.lastError);
+            console.error(
+              "❌ Auth Bridge: Error sending message:",
+              chrome.runtime.lastError
+            );
           } else {
             console.log("✅ Auth Bridge: Token sent to extension:", response);
           }

@@ -1,9 +1,9 @@
 {
   "manifest_version": 3,
   "name": "MYM Chat Live",
-  "version": "1.2.7",
-  "description": "Injecte dynamiquement les nouveaux messages d'un chat MYM.",
-  "permissions": ["storage"],
+  "version": "1.2.10",
+  "description": "Extension pour créateurs MYM.fans - Chat Live amélioré, Badges revenus, Emoji Picker, Notes. Essai gratuit 7 jours.",
+  "permissions": ["storage", "alarms"],
   "host_permissions": [
     "https://creators.mym.fans/*",
     "https://mym-extends-frontend.pages.dev/*",
@@ -28,7 +28,7 @@
         "https://creators.mym.fans/app/myms*",
         "https://creators.mym.fans/app/account/my-followers*"
       ],
-      "js": ["content.js"],
+      "js": ["config.js", "content.js"],
       "run_at": "document_idle"
     },
     {
@@ -36,12 +36,12 @@
         "https://mym-extends-frontend.pages.dev/*signin*",
         "https://mym-extends-frontend.pages.dev/*login*"
       ],
-      "js": ["auth-bridge.js"],
+      "js": ["config.js", "auth-bridge.js"],
       "run_at": "document_idle"
     },
     {
       "matches": ["https://mymchat.fr/*signin*", "https://mymchat.fr/*login*"],
-      "js": ["auth-bridge.js"],
+      "js": ["config.js", "auth-bridge.js"],
       "run_at": "document_idle"
     }
   ]

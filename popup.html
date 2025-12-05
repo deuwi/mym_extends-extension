@@ -302,9 +302,115 @@
         color: #10b981;
       }
 
+      /* License Section */
+      .license-section {
+        background: linear-gradient(135deg, #1a1a2e 0%, #2e1a2e 100%);
+        border-radius: 8px;
+        padding: 16px;
+        margin-top: 10px;
+      }
+
+      .license-title {
+        font-size: 14px;
+        font-weight: 700;
+        color: #9b7bd5;
+        margin-bottom: 8px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+
+      .license-hint {
+        font-size: 12px;
+        color: #b8b8b8;
+        line-height: 1.5;
+        margin-bottom: 12px;
+      }
+
+      .license-form {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+      }
+
+      .license-form input {
+        padding: 10px 12px;
+        border: 1px solid #333;
+        border-radius: 6px;
+        background: #0a0a0a;
+        color: #e0e0e0;
+        font-size: 13px;
+        font-family: monospace;
+        letter-spacing: 1px;
+      }
+
+      .license-form input::placeholder {
+        color: #555;
+        letter-spacing: normal;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto",
+          "Helvetica", "Arial", sans-serif;
+      }
+
+      .license-form input:focus {
+        outline: none;
+        border-color: #9b7bd5;
+      }
+
+      .license-status {
+        padding: 12px;
+        border-radius: 6px;
+        font-size: 12px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+
+      .license-status.active {
+        background: rgba(16, 185, 129, 0.1);
+        border: 1px solid #10b981;
+        color: #10b981;
+      }
+
+      .license-status.revoked {
+        background: rgba(220, 38, 38, 0.1);
+        border: 1px solid #dc2626;
+        color: #dc2626;
+      }
+
+      .license-details {
+        font-size: 11px;
+        color: #888;
+        margin-top: 4px;
+      }
+
+      .btn-secondary {
+        padding: 10px 20px;
+        border: 1px solid #9b7bd5;
+        border-radius: 6px;
+        background: transparent;
+        color: #9b7bd5;
+        font-size: 13px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.2s;
+        width: 100%;
+      }
+
+      .btn-secondary:hover {
+        background: rgba(155, 123, 213, 0.1);
+      }
+
+      .btn-secondary:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+      }
+
       .link-container {
         margin-top: 12px;
         text-align: center;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
       }
 
       .link-container a {
@@ -314,12 +420,21 @@
         font-weight: 600;
         display: inline-flex;
         align-items: center;
+        justify-content: center;
         gap: 4px;
         transition: color 0.2s;
       }
 
       .link-container a:hover {
         color: #9b7bd5;
+      }
+
+      .link-container a.pricing-link {
+        color: #f59e0b;
+      }
+
+      .link-container a.pricing-link:hover {
+        color: #fbbf24;
       }
     </style>
   </head>
@@ -410,6 +525,22 @@
         </div>
       </div>
 
+      <div class="row">
+        <div>
+          <div class="label">Diffusion de masse</div>
+          <div class="hint">Envoyer un message à tous vos contacts</div>
+        </div>
+        <div
+          id="toggle-broadcast"
+          class="toggle"
+          role="button"
+          tabindex="0"
+          aria-label="Toggle Broadcast Messages"
+        >
+          <div class="knob"></div>
+        </div>
+      </div>
+
       <hr class="section-divider" />
 
       <!-- Section Authentification (affichée si non connecté) -->
@@ -474,10 +605,76 @@
           <div class="user-email">👤 <span id="userEmail"></span></div>
           <div class="subscription-badge" id="subscriptionBadge"></div>
         </div>
+        <div
+          class="link-container"
+          id="pricingLinkContainer"
+          style="display: none"
+        >
+          <a
+            href="https://mym-extends-frontend.pages.dev/pricing"
+            target="_blank"
+            class="pricing-link"
+          >
+            <span>💳</span>
+            <span>Renouveler mon abonnement</span>
+          </a>
+        </div>
         <button id="logoutBtn" class="btn-logout">Déconnexion</button>
+      </div>
+
+      <!-- Lien vers le site web -->
+      <div class="link-container" style="margin-top: 16px;">
+        <a href="https://mymchat.fr" target="_blank" rel="noopener noreferrer">
+          <span>🌐</span>
+          <span>Visiter mymchat.fr</span>
+        </a>
+      </div>
+
+      <!-- Section Licence Agence -->
+      <div id="license-section" class="license-section" style="display: none">
+        <div class="license-title">
+          <span>🏢</span>
+          <span>Licence Agence</span>
+        </div>
+
+        <!-- Formulaire d'activation (affiché si pas de licence) -->
+        <div id="license-form-container" style="display: none">
+          <div class="license-hint">
+            Entrez votre clé de licence fournie par votre agence pour débloquer
+            l'extension.
+          </div>
+          <div class="license-form">
+            <input
+              type="text"
+              id="licenseKeyInput"
+              placeholder="AGENCY-XXXX-XXXX-XXXX-XXXX"
+              maxlength="29"
+            />
+            <button id="activateLicenseBtn" class="btn-primary">
+              Activer la licence
+            </button>
+          </div>
+          <div
+            id="licenseActivateStatus"
+            class="status-message"
+            style="display: none"
+          ></div>
+        </div>
+
+        <!-- Statut de la licence (affiché si licence active) -->
+        <div id="license-status-container" style="display: none">
+          <div class="license-status active" id="licenseStatusDisplay">
+            <span>✅</span>
+            <div>
+              <div><strong>Licence active</strong></div>
+              <div class="license-details" id="licenseDetails"></div>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
 
+    <script src="config.js"></script>
     <script src="popup.js"></script>
   </body>
 </html>

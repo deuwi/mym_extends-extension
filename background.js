@@ -1,28 +1,63 @@
 // background.js - Initialize default values on extension install
-const API_BASE = "https://mymchat.fr";
+
+// Import configuration - service worker can use importScripts
+importScripts("config.js");
+
+// Get API_BASE from global APP_CONFIG
+const API_BASE = globalThis.APP_CONFIG?.API_BASE || "https://mymchat.fr";
+console.log(`🔧 Background loaded with API_BASE: ${API_BASE}`);
 
 // 🌉 Écouter les messages du auth-bridge (connexion Google depuis le site web)
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  // 🔓 Message pour vérifier la licence agence
+  if (message.action === "checkLicense") {
+    console.log("📨 Message reçu: vérification de la licence demandée");
+    checkAndEnableFeatures().then(() => {
+      sendResponse({ success: true });
+    });
+    return true; // Indique qu'on va répondre de manière asynchrone
+  }
+
   // 🔥 Nouveau: Support pour Firebase Token depuis la page web
   if (message.type === "FIREBASE_TOKEN" && message.token) {
     console.log("✅ Background: Received Firebase token from web");
-    
-    // Stocker le token
-    chrome.storage.local.set({ firebaseToken: message.token }, () => {
-      console.log("✅ Background: Firebase token stored");
-      
-      // Envoyer une réponse au content script
-      sendResponse({ success: true });
-      
-      // Fermer l'onglet d'authentification si c'est le sender
-      if (sender.tab && sender.tab.id) {
-        chrome.tabs.remove(sender.tab.id);
+
+    // Stocker le token + email + user_id ET activer toutes les features
+    chrome.storage.local.set(
+      {
+        firebaseToken: message.token,
+        user_email: message.user_email || "",
+        user_id: message.user_id || "",
+        // Activer toutes les fonctionnalités par défaut
+        mym_live_enabled: true,
+        mym_badges_enabled: true,
+        mym_stats_enabled: true,
+        mym_emoji_enabled: true,
+        mym_notes_enabled: true,
+        mym_broadcast_enabled: true,
+      },
+      () => {
+        console.log(
+          "✅ Background: Firebase token stored and features enabled"
+        );
+
+        // Vérifier immédiatement le statut d'abonnement et la licence
+        checkSubscriptionStatus();
+        checkAndEnableFeatures();
+
+        // Envoyer une réponse au content script
+        sendResponse({ success: true });
+
+        // Fermer l'onglet d'authentification si c'est le sender
+        if (sender.tab && sender.tab.id) {
+          chrome.tabs.remove(sender.tab.id);
+        }
       }
-    });
-    
+    );
+
     return true; // Indique qu'on va répondre de manière asynchrone
   }
-  
+
   if (message.type === "GOOGLE_AUTH_SUCCESS") {
     // console.log(
     //   "✅ Background: Received Google auth token from web",
@@ -42,6 +77,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         mym_stats_enabled: true,
         mym_emoji_enabled: true,
         mym_notes_enabled: true,
+        mym_broadcast_enabled: true,
       },
       () => {
         // console.log("✅ Background: Token stored and features enabled");
@@ -71,6 +107,7 @@ chrome.runtime.onInstalled.addListener(() => {
     mym_stats_enabled: false,
     mym_emoji_enabled: false,
     mym_notes_enabled: false,
+    mym_broadcast_enabled: false,
   };
 
   chrome.storage.local.get(Object.keys(defaults), (items) => {
@@ -107,23 +144,25 @@ function startSubscriptionCheck() {
 
 async function checkSubscriptionStatus() {
   chrome.storage.local.get(
-    ["access_token", "access_token_stored_at"],
+    ["access_token", "firebaseToken", "access_token_stored_at", "user_email"],
     async (data) => {
-      const token = data.access_token;
+      // Priorité au firebaseToken, sinon access_token
+      const token = data.firebaseToken || data.access_token;
+      const email = data.user_email;
       const tokenTime = data.access_token_stored_at || 0;
       const now = Date.now();
       const ageMs = now - tokenTime;
       const ninetyDays = 90 * 24 * 60 * 60 * 1000;
 
-      // Si pas de token, ne rien faire (utilisateur pas connecté)
-      if (!token) {
-        // console.log("ℹ️  Pas de token - utilisateur non connecté");
+      // Si pas de token ni email, ne rien faire (utilisateur pas connecté)
+      if (!token && !email) {
+        console.log("ℹ️  Pas de token - utilisateur non connecté");
         return;
       }
 
       // Si token trop vieux (90 jours), NE PAS désactiver, juste logger
       // L'utilisateur devra se reconnecter mais on ne supprime rien
-      if (ageMs > ninetyDays) {
+      if (token && ageMs > ninetyDays) {
         // console.log("⚠️  Token expiré (>90 jours) - veuillez vous reconnecter");
         // Ne pas désactiver les features, juste informer
         return;
@@ -131,13 +170,29 @@ async function checkSubscriptionStatus() {
 
       // Vérifier le statut avec le backend
       try {
-        // console.log("🔍 Vérification token:", token?.substring(0, 20) + "...");
-        const res = await fetch(API_BASE + "/api/check-subscription", {
-          headers: { Authorization: `Bearer ${token}` },
+        // Déterminer si on est en mode local
+        const isLocal = globalThis.APP_CONFIG?.ENVIRONMENT === "local";
+
+        // En mode local, utiliser les headers de dev au lieu du token Firebase
+        const headers = isLocal
+          ? {
+              "X-Dev-User-Email": email || "dev@test.com",
+              "X-Dev-User-ID": "dev-user",
+            }
+          : { Authorization: `Bearer ${token}` };
+
+        console.log(
+          `🔧 Background - Mode ${
+            isLocal ? "LOCAL" : "PRODUCTION"
+          }: vérification abonnement`
+        );
+
+        const res = await fetch(API_BASE + "/check-subscription", {
+          headers,
         });
 
         // console.log(
-        //   "📡 Réponse API /api/check-subscription:",
+        //   "📡 Réponse API /check-subscription:",
         //   res.status,
         //   res.statusText
         // );
@@ -195,9 +250,9 @@ async function checkSubscriptionStatus() {
         console.error("❌ Erreur vérification statut:", err);
         // En cas d'erreur réseau, on ne désactive pas (pour éviter les faux positifs)
       }
-    }
-  );
-}
+    } // Fin du callback async chrome.storage.local.get
+  ); // Fin de chrome.storage.local.get
+} // Fin de checkSubscriptionStatus
 
 function disableAllFeatures() {
   chrome.storage.local.set(
@@ -207,6 +262,7 @@ function disableAllFeatures() {
       mym_stats_enabled: false,
       mym_emoji_enabled: false,
       mym_notes_enabled: false,
+      mym_broadcast_enabled: false,
     },
     () => {
       // console.log("🚫 Toutes les fonctionnalités désactivées");
@@ -214,5 +270,141 @@ function disableAllFeatures() {
   );
 }
 
-// Lancer la vérification au démarrage de l'extension
+// 🔓 Vérifier et activer automatiquement les fonctionnalités si licence agence active
+async function checkAndEnableFeatures() {
+  try {
+    const API_BASE = globalThis.APP_CONFIG?.API_BASE || "http://127.0.0.1:8080";
+    const isLocal = globalThis.APP_CONFIG?.ENVIRONMENT === "local";
+
+    // Récupérer les données d'authentification
+    const storageData = await new Promise((resolve) => {
+      chrome.storage.local.get(["firebaseToken", "user_email"], resolve);
+    });
+    const token = storageData.firebaseToken;
+    const email = storageData.user_email;
+
+    if (!token && !email) {
+      console.log("ℹ️ Pas de token ni d'email - utilisateur non connecté");
+      return;
+    }
+
+    console.log(
+      `🔍 Credentials trouvés - email: ${email}, token: ${
+        token ? "présent" : "absent"
+      }`
+    );
+
+    // Préparer les headers selon l'environnement
+    const headers = isLocal
+      ? {
+          "X-Dev-User-Email": email || "dev@test.com",
+          "X-Dev-User-ID": "dev-user",
+        }
+      : {
+          Authorization: `Bearer ${token}`,
+        };
+
+    console.log(
+      `🔍 Vérification licence agence sur ${API_BASE}/check-subscription...`
+    );
+
+    const res = await fetch(`${API_BASE}/check-subscription`, {
+      headers,
+    });
+
+    if (!res.ok) {
+      console.warn(
+        `⚠️ Réponse HTTP ${res.status} lors de la vérification de la licence`
+      );
+      return;
+    }
+
+    const data = await res.json();
+
+    // Si l'utilisateur a une licence agence active OU un abonnement actif, activer les fonctionnalités
+    const hasAccess =
+      data.agency_license_active === true || data.subscription_active === true;
+
+    if (hasAccess) {
+      console.log(
+        "🔓 Accès actif - activation automatique des fonctionnalités"
+      );
+
+      const allEnabled = {
+        mym_live_enabled: true,
+        mym_badges_enabled: true,
+        mym_stats_enabled: true,
+        mym_emoji_enabled: true,
+        mym_notes_enabled: true,
+        mym_broadcast_enabled: true,
+      };
+
+      await chrome.storage.local.set(allEnabled);
+    } else {
+      console.log("🚫 Pas d'accès actif - désactivation des fonctionnalités");
+
+      const allDisabled = {
+        mym_live_enabled: false,
+        mym_badges_enabled: false,
+        mym_stats_enabled: false,
+        mym_emoji_enabled: false,
+        mym_notes_enabled: false,
+        mym_broadcast_enabled: false,
+      };
+
+      await chrome.storage.local.set(allDisabled);
+    }
+  } catch (err) {
+    console.error(
+      "❌ Erreur lors de la vérification de la licence agence:",
+      err
+    );
+  }
+}
+
+// Vérifier la licence agence au changement de token/email
+chrome.storage.onChanged.addListener(async (changes, areaName) => {
+  if (areaName === "local") {
+    if (changes.firebaseToken || changes.user_email) {
+      console.log(
+        "🔄 Token/email modifié - vérification de la licence agence..."
+      );
+      await checkAndEnableFeatures();
+    }
+  }
+});
+
+// Lancer les vérifications au démarrage de l'extension
 startSubscriptionCheck();
+checkAndEnableFeatures();
+
+// Vérifier aussi quand le service worker se réveille
+self.addEventListener("activate", () => {
+  console.log("🔄 Service worker activé - vérification de la licence...");
+  checkAndEnableFeatures();
+});
+
+// Vérifier immédiatement si déjà des credentials en storage
+chrome.storage.local.get(["firebaseToken", "user_email"], (data) => {
+  if (data.firebaseToken || data.user_email) {
+    console.log(
+      "🔍 Credentials détectés au démarrage - vérification immédiate de la licence"
+    );
+    checkAndEnableFeatures();
+  }
+});
+
+// Créer une alarme pour vérifier périodiquement la licence (toutes les 1 minute)
+chrome.alarms.create("checkLicenseAlarm", {
+  periodInMinutes: 1,
+});
+
+// Écouter l'alarme
+chrome.alarms.onAlarm.addListener((alarm) => {
+  if (alarm.name === "checkLicenseAlarm") {
+    console.log(
+      "⏰ Alarme déclenchée - vérification périodique de la licence..."
+    );
+    checkAndEnableFeatures();
+  }
+});

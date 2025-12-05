@@ -61,8 +61,8 @@
   const NAV_SELECTOR = ".aside.sidebar, aside.sidebar";
   const POLL_INTERVAL_MS = 10000; // 10s (optimisé)
   const SUBSCRIPTION_CHECK_INTERVAL = 60 * 60 * 1000; // 1 heure
-  const USER_INFO_CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
-  const API_BASE = "https://mymchat.fr";
+  const USER_INFO_CACHE_DURATION = 2 * 60 * 1000; // 2 minutes (réduit pour éviter données obsolètes)
+  const API_BASE = globalThis.APP_CONFIG?.API_BASE || "http://127.0.0.1:8080";
 
   let knownChatIds = new Set();
   let knownListIds = new Set();
@@ -70,40 +70,111 @@
   let observer = null;
   let pollingInProgress = false;
   let discussionsInjected = false;
-  const totalSpentFetched = new Set(); // Track which users we've already fetched total spent for
-  const userInfoCache = new Map(); // Cache pour les infos utilisateur {username: {data, timestamp}}
+  
+  // Références pour cleanup
+  let footerObserver = null;
+  let inputObserver = null;
+  let notesButtonObserver = null;
+  let urlObserver = null;
+  let globalClickHandler = null;
+  let popstateHandler = null;
+  let messageListener = null;
+  
+  // LRU Cache implementation to prevent unlimited memory growth
+  class LRUCache {
+    constructor(maxSize = 100) {
+      this.cache = new Map();
+      this.maxSize = maxSize;
+    }
+
+    get(key) {
+      if (!this.cache.has(key)) return null;
+      const value = this.cache.get(key);
+      // Move to end (most recent)
+      this.cache.delete(key);
+      this.cache.set(key, value);
+      return value;
+    }
+
+    set(key, value) {
+      if (this.cache.has(key)) {
+        this.cache.delete(key);
+      } else if (this.cache.size >= this.maxSize) {
+        // Remove oldest (first)
+        const firstKey = this.cache.keys().next().value;
+        this.cache.delete(firstKey);
+      }
+      this.cache.set(key, value);
+    }
+
+    clear() {
+      this.cache.clear();
+    }
+    
+    has(key) {
+      return this.cache.has(key);
+    }
+    
+    add(key) {
+      this.set(key, true);
+    }
+    
+    delete(key) {
+      this.cache.delete(key);
+    }
+  }
+  
+  const totalSpentFetched = new LRUCache(100); // Track which users we've already fetched total spent for (limited to 100)
+  const userInfoCache = new LRUCache(100); // Cache pour les infos utilisateur {username: {data, timestamp}}
+  let userInfoBoxFetchController = null; // AbortController pour userInfoBox
+  let badgeFetchController = null; // AbortController pour les badges
 
   // Feature flags
   let badgesEnabled = true;
   let statsEnabled = true;
   let emojiEnabled = true;
   let notesEnabled = true;
+  let subscriptionMonitoringInterval = null;
 
   // 🔒 Vérification périodique du statut Premium/Trial
   function startSubscriptionMonitoring() {
     // Vérifier toutes les heures si l'abonnement est toujours actif
-    setInterval(async () => {
+    if (subscriptionMonitoringInterval) return;
+    
+    subscriptionMonitoringInterval = setInterval(async () => {
+      // Vérifier si le contexte est toujours valide
+      if (!chrome.runtime?.id) {
+        console.warn("[MYM] Extension context invalidated, stopping subscription monitoring");
+        stopSubscriptionMonitoring();
+        return;
+      }
+      
       const token = await getAccessToken();
       if (!token) return;
 
       try {
-        const res = await fetch(API_BASE + "/api/check-subscription", {
+        const res = await fetch(API_BASE + "/check-subscription", {
           headers: { Authorization: `Bearer ${token}` },
         });
 
         if (!res.ok) {
           if (res.status === 401) {
             // Token expiré, essayer de le rafraîchir
-            console.log("🔄 Token expiré lors de la vérification périodique, tentative de rafraîchissement...");
+            console.log(
+              "🔄 Token expiré lors de la vérification périodique, tentative de rafraîchissement..."
+            );
             const refreshed = await tryRefreshToken(token);
             if (!refreshed) {
-              // Si le rafraîchissement a échoué, déconnecter l'utilisateur
-              console.log("❌ Impossible de rafraîchir le token - Déconnexion de l'utilisateur");
-              await logoutUser();
+              // Si le rafraîchissement a échoué, afficher la bannière sans déconnecter
+              console.log(
+                "❌ Impossible de rafraîchir le token - Affichage bannière expiration"
+              );
+              showSubscriptionExpiredBanner();
+              stopSubscriptionMonitoring();
               return;
             }
             // Réessayer avec le nouveau token
-            const retryRes = await fetch(API_BASE + "/api/check-subscription", {
+            const retryRes = await fetch(API_BASE + "/check-subscription", {
               headers: { Authorization: `Bearer ${refreshed}` },
             });
             if (!retryRes.ok) {
@@ -111,7 +182,11 @@
               return;
             }
             const retryData = await retryRes.json();
-            if (retryData.email_verified === false || (!retryData.subscription_active && retryData.trial_days_remaining <= 0)) {
+            if (
+              retryData.email_verified === false ||
+              (!retryData.subscription_active &&
+                retryData.trial_days_remaining <= 0)
+            ) {
               showSubscriptionExpiredBanner();
             }
             return;
@@ -137,13 +212,37 @@
       }
     }, SUBSCRIPTION_CHECK_INTERVAL);
   }
+  
+  function stopSubscriptionMonitoring() {
+    if (subscriptionMonitoringInterval) {
+      clearInterval(subscriptionMonitoringInterval);
+      subscriptionMonitoringInterval = null;
+    }
+  }
 
   function getAccessToken() {
     return new Promise((resolve) => {
+      // Vérifier si le contexte d'extension est valide
+      if (!chrome.runtime?.id) {
+        console.warn("[MYM] Extension context invalidated in getAccessToken");
+        resolve(null);
+        return;
+      }
+      
       if (typeof window.chrome !== "undefined" && window.chrome.storage) {
-        window.chrome.storage.local.get(["access_token"], (items) => {
-          resolve(items.access_token || null);
-        });
+        try {
+          window.chrome.storage.local.get(["access_token"], (items) => {
+            if (chrome.runtime.lastError) {
+              console.warn("[MYM] Error getting access token:", chrome.runtime.lastError);
+              resolve(null);
+              return;
+            }
+            resolve(items.access_token || null);
+          });
+        } catch (error) {
+          console.warn("[MYM] Exception in getAccessToken:", error);
+          resolve(null);
+        }
       } else {
         resolve(null);
       }
@@ -154,7 +253,7 @@
   async function tryRefreshToken(oldToken) {
     try {
       console.log("🔄 Demande de rafraîchissement du token à la page web...");
-      
+
       // Ouvrir la page de signin dans un nouvel onglet caché pour obtenir un nouveau token
       return new Promise((resolve) => {
         const messageListener = (event) => {
@@ -179,10 +278,10 @@
         };
 
         window.addEventListener("message", messageListener);
-        
+
         // Demander un token frais via postMessage à la page
         window.postMessage({ type: "REQUEST_FRESH_TOKEN" }, "*");
-        
+
         // Timeout après 5 secondes
         setTimeout(() => {
           window.removeEventListener("message", messageListener);
@@ -200,6 +299,32 @@
   function logoutUser() {
     return new Promise((resolve) => {
       if (typeof window.chrome !== "undefined" && window.chrome.storage) {
+        // Vérifier si on est dans une boucle de rechargement
+        const reloadCount = sessionStorage.getItem('mym_reload_count') || '0';
+        const lastReload = sessionStorage.getItem('mym_last_reload') || '0';
+        const now = Date.now();
+        const timeSinceLastReload = now - parseInt(lastReload);
+        
+        // Si plus de 3 rechargements en moins de 30 secondes, ne pas recharger
+        if (parseInt(reloadCount) >= 3 && timeSinceLastReload < 30000) {
+          console.warn("⚠️ Boucle de rechargement détectée - Arrêt du rechargement automatique");
+          // Supprimer le token et les données utilisateur sans recharger
+          window.chrome.storage.local.remove(
+            ["access_token", "access_token_stored_at", "user_id", "user_email"],
+            () => {
+              console.log("🚪 Utilisateur déconnecté - Token expiré (sans rechargement)");
+              showSubscriptionExpiredBanner();
+              resolve();
+            }
+          );
+          return;
+        }
+        
+        // Incrémenter le compteur de rechargement
+        const newCount = timeSinceLastReload < 30000 ? parseInt(reloadCount) + 1 : 1;
+        sessionStorage.setItem('mym_reload_count', newCount.toString());
+        sessionStorage.setItem('mym_last_reload', now.toString());
+        
         // Supprimer le token et les données utilisateur
         window.chrome.storage.local.remove(
           ["access_token", "access_token_stored_at", "user_id", "user_email"],
@@ -278,7 +403,7 @@
       //   "🔍 Validating token with backend:",
       //   token?.substring(0, 30) + "..."
       // );
-      const res = await fetch(API_BASE + "/api/check-subscription", {
+      const res = await fetch(API_BASE + "/check-subscription", {
         headers: { Authorization: `Bearer ${token}` },
       });
 
@@ -289,7 +414,7 @@
           const refreshed = await tryRefreshToken(token);
           if (refreshed) {
             // Réessayer avec le nouveau token
-            const retryRes = await fetch(API_BASE + "/api/check-subscription", {
+            const retryRes = await fetch(API_BASE + "/check-subscription", {
               headers: { Authorization: `Bearer ${refreshed}` },
             });
             if (retryRes.ok) {
@@ -297,11 +422,10 @@
               return data.email_verified !== false;
             }
           }
-          // Si le rafraîchissement a échoué, déconnecter l'utilisateur
+          // Si le rafraîchissement a échoué, retourner false sans déconnecter
           console.log(
-            "❌ Impossible de rafraîchir le token - Déconnexion de l'utilisateur"
+            "❌ Impossible de rafraîchir le token - Retour false"
           );
-          await logoutUser();
         }
         return false;
       }
@@ -1780,11 +1904,38 @@
   }
 
   // 🆕 Récupérer les informations détaillées d'un utilisateur (abonnement, médias, etc.)
-  async function fetchUserDetailedInfo(username) {
-    // Vérifier le cache
-    const cached = userInfoCache.get(username);
-    if (cached && Date.now() - cached.timestamp < USER_INFO_CACHE_DURATION) {
-      return cached.data;
+  async function fetchUserDetailedInfo(username, forceRefresh = false, source = 'badge') {
+    // Utiliser le bon AbortController selon la source
+    let controller, currentController;
+    if (source === 'userInfoBox') {
+      currentController = userInfoBoxFetchController;
+      // Annuler la requête userInfoBox précédente si elle existe
+      if (userInfoBoxFetchController) {
+        userInfoBoxFetchController.abort();
+      }
+      userInfoBoxFetchController = new AbortController();
+      controller = userInfoBoxFetchController;
+    } else {
+      currentController = badgeFetchController;
+      // Pour les badges, ne pas annuler - laisser les requêtes se terminer
+      badgeFetchController = new AbortController();
+      controller = badgeFetchController;
+    }
+    
+    const signal = controller.signal;
+    
+    // Vérifier le cache (sauf si forceRefresh)
+    if (!forceRefresh) {
+      const cached = userInfoCache.get(username);
+      if (cached && Date.now() - cached.timestamp < USER_INFO_CACHE_DURATION) {
+        // Nettoyer le controller approprié
+        if (source === 'userInfoBox') {
+          userInfoBoxFetchController = null;
+        } else {
+          badgeFetchController = null;
+        }
+        return cached.data;
+      }
     }
 
     const info = {
@@ -1806,12 +1957,21 @@
       const url = `${
         location.origin
       }/app/income-details?search=${encodeURIComponent(username)}`;
-      const response = await fetch(url, { credentials: "include" });
+      const response = await fetch(url, { 
+        credentials: "include",
+        signal: signal
+      });
 
       if (!response.ok) {
         //   "[MYM] Failed to fetch user info, status:",
         //   response.status
         // );
+        // Nettoyer le bon controller
+        if (source === 'userInfoBox') {
+          userInfoBoxFetchController = null;
+        } else {
+          badgeFetchController = null;
+        }
         return info;
       }
 
@@ -1822,11 +1982,14 @@
       // Parcourir toutes les pages pour récupérer les informations
       let currentPage = 1;
       let hasMorePages = true;
-      const maxPages = 50; // Limite de sécurité
+      const maxPages = 10; // Limite de sécurité (optimisé pour performance)
 
       while (hasMorePages && currentPage <= maxPages) {
         const pageUrl = currentPage === 1 ? url : `${url}&page=${currentPage}`;
-        const pageResponse = await fetch(pageUrl, { credentials: "include" });
+        const pageResponse = await fetch(pageUrl, { 
+          credentials: "include",
+          signal: signal
+        });
 
         if (!pageResponse.ok) break;
 
@@ -1947,28 +2110,40 @@
         timestamp: Date.now(),
       });
 
+      // Nettoyer le bon controller
+      if (source === 'userInfoBox') {
+        userInfoBoxFetchController = null;
+      } else {
+        badgeFetchController = null;
+      }
+      
       return info;
     } catch (err) {
-      console.error(
-        "[MYM] Error fetching detailed info for",
-        username,
-        ":",
-        err
-      );
+      // Nettoyer le bon controller
+      if (source === 'userInfoBox') {
+        userInfoBoxFetchController = null;
+      } else {
+        badgeFetchController = null;
+      }
+      
+      if (err.name === 'AbortError') {
+        return null;
+      }
       return info;
     }
   }
 
   // 🆕 Créer et injecter la box d'information utilisateur
   let isUpdatingUserInfoBox = false;
+  let currentUserInfoBoxUsername = null; // Track current username to avoid unnecessary updates
 
   async function injectUserInfoBox(username) {
     if (!username) {
       return;
     }
 
-    // Éviter les boucles infinies
-    if (isUpdatingUserInfoBox) {
+    // Éviter les boucles infinies et les appels multiples
+    if (isUpdatingUserInfoBox && currentUserInfoBoxUsername === username) {
       return;
     }
 
@@ -1979,46 +2154,71 @@
       if (existingBox) {
         existingBox.remove();
       }
+      currentUserInfoBoxUsername = null;
       return;
     }
 
     isUpdatingUserInfoBox = true;
+    currentUserInfoBoxUsername = username;
+    console.log('[MYM] 🔒 Flags set - isUpdatingUserInfoBox:', isUpdatingUserInfoBox, 'currentUserInfoBoxUsername:', currentUserInfoBoxUsername);
 
-    // Vérifier si la box existe déjà
-    let userInfoBox = document.getElementById("mym-user-info-box");
+    try {
+      // Vérifier si la box existe déjà
+      let userInfoBox = document.getElementById("mym-user-info-box");
 
-    if (!userInfoBox) {
-      // Créer la box
-      userInfoBox = document.createElement("div");
-      userInfoBox.id = "mym-user-info-box";
-      userInfoBox.style.cssText = `
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        border-radius: 12px;
-        padding: 16px;
-        margin-bottom: 16px;
-        color: white;
-        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+      if (!userInfoBox) {
+        // Créer la box
+        userInfoBox = document.createElement("div");
+        userInfoBox.id = "mym-user-info-box";
+        userInfoBox.style.cssText = `
+          background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+          border-radius: 12px;
+          padding: 8px;
+          margin-bottom: 8px;
+          color: white;
+          box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        `;
+        
+        // Insérer la box dans le sidebar
+        const sidebarSection = document.querySelector(".sidebar__section");
+        if (sidebarSection) {
+          sidebarSection.insertBefore(userInfoBox, sidebarSection.firstChild);
+        } else {
+          // Si pas de sidebar, annuler
+          isUpdatingUserInfoBox = false;
+          currentUserInfoBoxUsername = null;
+          return;
+        }
+      }
+
+      // Afficher un loader
+      userInfoBox.innerHTML = `
+        <div style="text-align: center;">
+          <div style="font-size: 14px; opacity: 0.9;">⏳ Chargement des informations...</div>
+        </div>
       `;
-    }
 
-    // Afficher un loader
-    userInfoBox.innerHTML = `
-      <div style="text-align: center;">
-        <div style="font-size: 14px; opacity: 0.9;">⏳ Chargement des informations...</div>
-      </div>
-    `;
+      // Récupérer les informations
+      const info = await fetchUserDetailedInfo(username, false, 'userInfoBox');
 
-    // Insérer la box dans le sidebar
-    const sidebarSection = document.querySelector(".sidebar__section");
-    if (sidebarSection) {
-      sidebarSection.insertBefore(userInfoBox, sidebarSection.firstChild);
-    }
+      // Vérifier que c'est toujours le bon utilisateur (éviter les race conditions)
+      if (currentUserInfoBoxUsername !== username) {
+        isUpdatingUserInfoBox = false;
+        return;
+      }
+      
+      // Vérifier que info n'est pas null (peut être null si fetch avorté)
+      if (!info) {
+        // Réinitialiser les flags pour permettre un nouveau chargement
+        isUpdatingUserInfoBox = false;
+        currentUserInfoBoxUsername = null;
+        // Ne pas afficher de message - le fetch a été avorté car l'utilisateur a changé
+        // Une nouvelle requête est probablement déjà en cours pour le bon utilisateur
+        return;
+      }
 
-    // Récupérer les informations
-    const info = await fetchUserDetailedInfo(username);
-
-    // Récupérer la catégorie actuelle de l'utilisateur
-    const userCategory = await getUserCategory(username);
+      // Récupérer la catégorie actuelle de l'utilisateur
+      const userCategory = await getUserCategory(username);
 
     // Déterminer le type d'abonnement
     let subscriptionBadge = "";
@@ -2042,11 +2242,23 @@
 
     // Afficher les informations
     userInfoBox.innerHTML = `
-      <div style="margin-bottom: 12px;">
-        <div style="font-size: 16px; font-weight: 700; margin-bottom: 4px;">
-          👤 ${info.username}
+      <div style="margin-bottom: 8px;">
+        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 3px;">
+          <div style="font-size: 14px; font-weight: 700;">
+            👤 ${info.username}
+          </div>
+          <button class="mym-refresh-info" title="Rafraîchir les informations" style="
+            background: rgba(255, 255, 255, 0.1);
+            border: none;
+            border-radius: 4px;
+            padding: 4px 8px;
+            color: white;
+            cursor: pointer;
+            font-size: 12px;
+            transition: all 0.2s;
+          ">🔄</button>
         </div>
-        <div style="display: flex; gap: 8px; align-items: center;">
+        <div style="display: flex; gap: 6px; align-items: center;">
           ${subscriptionBadge}
           <!-- Système de catégorisation -->
           <div style="display: flex; gap: 2px; flex: 1;">
@@ -2111,59 +2323,107 @@
         </div>
         ${
           info.firstSubscriptionDate
-            ? `<div style="font-size: 12px; opacity: 0.85; margin-top: 8px;">📅 Premier abonnement: ${info.firstSubscriptionDate}</div>`
+            ? `<div style="font-size: 11px; opacity: 0.85; margin-top: 4px;">📅 Premier abo: ${info.firstSubscriptionDate}</div>`
             : ""
         }
       </div>
       
-      <div style="background: rgba(255, 255, 255, 0.1); border-radius: 8px; padding: 12px; margin-bottom: 12px;">
-        <div style="font-size: 13px; font-weight: 600; margin-bottom: 8px; opacity: 0.9;">💰 Total dépensé</div>
-        <div style="font-size: 24px; font-weight: 700;">${info.totalSpent.toFixed(
-          2
-        )} €</div>
+      <div style="display: flex; gap: 6px; align-items: center; margin-bottom: 6px;">
+        <div style="background: rgba(255, 255, 255, 0.1); border-radius: 6px; padding: 8px; flex: 1; box-sizing: border-box;">
+          <div style="font-size: 11px; font-weight: 600; margin-bottom: 4px; opacity: 0.9;">💰 Total dépensé</div>
+          <div style="font-size: 18px; font-weight: 700;">${info.totalSpent.toFixed(
+            2
+          )} €</div>
+        </div>
+        <button id="mym-toggle-details" style="
+          background: rgba(255, 255, 255, 0.1);
+          border: none;
+          border-radius: 6px;
+          padding: 8px 12px;
+          color: white;
+          cursor: pointer;
+          font-size: 14px;
+          transition: all 0.2s;
+        ">▼</button>
       </div>
 
-      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; font-size: 12px;">
-        <div style="background: rgba(255, 255, 255, 0.08); border-radius: 6px; padding: 8px;">
-          <div style="opacity: 0.75; margin-bottom: 4px;">📬 Médias push</div>
-          <div style="font-weight: 600;">${info.mediaPush.toFixed(2)} €</div>
+      <div id="mym-details-container" style="display: none; overflow: hidden; transition: all 0.3s;">
+        <div style="display: flex; flex-wrap: wrap; gap: 6px; font-size: 11px;">
+          <div style="background: rgba(255, 255, 255, 0.08); border-radius: 6px; padding: 6px; width: calc(50% - 3px); box-sizing: border-box;">
+            <div style="opacity: 0.75; margin-bottom: 2px;">📬 Médias push</div>
+            <div style="font-weight: 600;">${info.mediaPush.toFixed(2)} €</div>
+          </div>
+          <div style="background: rgba(255, 255, 255, 0.08); border-radius: 6px; padding: 6px; width: calc(50% - 3px); box-sizing: border-box;">
+            <div style="opacity: 0.75; margin-bottom: 2px;">⭐ Abonnements</div>
+            <div style="font-weight: 600;">${info.subscription.toFixed(
+              2
+            )} €</div>
+          </div>
+          <div style="background: rgba(255, 255, 255, 0.08); border-radius: 6px; padding: 6px; width: calc(50% - 3px); box-sizing: border-box;">
+            <div style="opacity: 0.75; margin-bottom: 2px;">🔄 Renouvellements</div>
+            <div style="font-weight: 600;">${info.subscriptionRenewal.toFixed(
+              2
+            )} €</div>
+          </div>
+          <div style="background: rgba(255, 255, 255, 0.08); border-radius: 6px; padding: 6px; width: calc(50% - 3px); box-sizing: border-box;">
+            <div style="opacity: 0.75; margin-bottom: 2px;">🎬 À la demande</div>
+            <div style="font-weight: 600;">${info.mediaOnDemand.toFixed(
+              2
+            )} €</div>
+          </div>
+          <div style="background: rgba(255, 255, 255, 0.08); border-radius: 6px; padding: 6px; width: calc(50% - 3px); box-sizing: border-box;">
+            <div style="opacity: 0.75; margin-bottom: 2px;">🔒 Médias privés</div>
+            <div style="font-weight: 600;">${info.mediaPrivate.toFixed(
+              2
+            )} €</div>
+          </div>
+          <div style="background: rgba(255, 255, 255, 0.08); border-radius: 6px; padding: 6px; width: calc(50% - 3px); box-sizing: border-box;">
+            <div style="opacity: 0.75; margin-bottom: 2px;">💝 Pourboires</div>
+            <div style="font-weight: 600;">${info.tips.toFixed(2)} €</div>
+          </div>
+          ${
+            info.consultation > 0
+              ? `
+          <div style="background: rgba(255, 255, 255, 0.08); border-radius: 6px; padding: 6px; width: calc(50% - 3px); box-sizing: border-box;">
+            <div style="opacity: 0.75; margin-bottom: 2px;">📞 Consultation</div>
+            <div style="font-weight: 600;">${info.consultation.toFixed(
+              2
+            )} €</div>
+          </div>
+          `
+              : ""
+          }
         </div>
-        <div style="background: rgba(255, 255, 255, 0.08); border-radius: 6px; padding: 8px;">
-          <div style="opacity: 0.75; margin-bottom: 4px;">⭐ Abonnements</div>
-          <div style="font-weight: 600;">${info.subscription.toFixed(2)} €</div>
-        </div>
-        <div style="background: rgba(255, 255, 255, 0.08); border-radius: 6px; padding: 8px;">
-          <div style="opacity: 0.75; margin-bottom: 4px;">🔄 Renouvellements</div>
-          <div style="font-weight: 600;">${info.subscriptionRenewal.toFixed(
-            2
-          )} €</div>
-        </div>
-        <div style="background: rgba(255, 255, 255, 0.08); border-radius: 6px; padding: 8px;">
-          <div style="opacity: 0.75; margin-bottom: 4px;">🎬 À la demande</div>
-          <div style="font-weight: 600;">${info.mediaOnDemand.toFixed(
-            2
-          )} €</div>
-        </div>
-        <div style="background: rgba(255, 255, 255, 0.08); border-radius: 6px; padding: 8px;">
-          <div style="opacity: 0.75; margin-bottom: 4px;">🔒 Médias privés</div>
-          <div style="font-weight: 600;">${info.mediaPrivate.toFixed(2)} €</div>
-        </div>
-        <div style="background: rgba(255, 255, 255, 0.08); border-radius: 6px; padding: 8px;">
-          <div style="opacity: 0.75; margin-bottom: 4px;">💝 Pourboires</div>
-          <div style="font-weight: 600;">${info.tips.toFixed(2)} €</div>
-        </div>
-        ${
-          info.consultation > 0
-            ? `
-        <div style="background: rgba(255, 255, 255, 0.08); border-radius: 6px; padding: 8px; grid-column: span 2;">
-          <div style="opacity: 0.75; margin-bottom: 4px;">📞 Consultation</div>
-          <div style="font-weight: 600;">${info.consultation.toFixed(2)} €</div>
-        </div>
-        `
-            : ""
-        }
       </div>
     `;
+
+    // Ajouter l'event listener pour le bouton de rafraîchissement
+    const refreshBtn = userInfoBox.querySelector(".mym-refresh-info");
+    if (refreshBtn) {
+      refreshBtn.addEventListener("click", async (e) => {
+        e.preventDefault();
+        refreshBtn.textContent = "⏳";
+        refreshBtn.disabled = true;
+        
+        // Vider le cache pour cet utilisateur
+        userInfoCache.delete(username);
+        
+        // Rafraîchir les informations
+        await injectUserInfoBox(username);
+        
+        setTimeout(() => {
+          refreshBtn.textContent = "🔄";
+          refreshBtn.disabled = false;
+        }, 500);
+      });
+      
+      refreshBtn.addEventListener("mouseenter", () => {
+        refreshBtn.style.background = "rgba(255, 255, 255, 0.2)";
+      });
+      refreshBtn.addEventListener("mouseleave", () => {
+        refreshBtn.style.background = "rgba(255, 255, 255, 0.1)";
+      });
+    }
 
     // Ajouter les event listeners pour les boutons de catégorie
     const categoryButtons = userInfoBox.querySelectorAll(".mym-category-btn");
@@ -2188,10 +2448,51 @@
       });
     });
 
-    // Réinitialiser le flag après un délai
-    setTimeout(() => {
+    // Ajouter l'event listener pour le bouton toggle
+    const toggleBtn = userInfoBox.querySelector("#mym-toggle-details");
+    const detailsContainer = userInfoBox.querySelector(
+      "#mym-details-container"
+    );
+
+    if (toggleBtn && detailsContainer) {
+      toggleBtn.addEventListener("click", (e) => {
+        e.preventDefault();
+        const isVisible = detailsContainer.style.display !== "none";
+
+        if (isVisible) {
+          detailsContainer.style.display = "none";
+          toggleBtn.textContent = "▼";
+        } else {
+          detailsContainer.style.display = "block";
+          toggleBtn.textContent = "▲";
+        }
+      });
+    }
+    } catch (error) {
+      console.error("[MYM] Error updating user info box:", error);
+      // En cas d'erreur, afficher un message dans la box
+      const userInfoBox = document.getElementById("mym-user-info-box");
+      if (userInfoBox) {
+        userInfoBox.innerHTML = `
+          <div style="text-align: center; padding: 8px;">
+            <div style="font-size: 14px; opacity: 0.9;">❌ Erreur de chargement</div>
+            <button onclick="this.parentElement.parentElement.remove()" style="
+              margin-top: 8px;
+              padding: 4px 8px;
+              background: rgba(255,255,255,0.2);
+              border: none;
+              border-radius: 4px;
+              color: white;
+              cursor: pointer;
+              font-size: 12px;
+            ">Fermer</button>
+          </div>
+        `;
+      }
+    } finally {
+      // Toujours réinitialiser le flag, même en cas d'erreur
       isUpdatingUserInfoBox = false;
-    }, 100);
+    }
   }
 
   async function addTotalSpentBadge(link, amount, username) {
@@ -2417,6 +2718,10 @@
 
   function startPolling() {
     if (pollHandle) return; // already started
+    
+    // Vérifier si la page est visible avant de commencer le polling
+    if (document.hidden) return;
+    
     scanExisting();
 
     // Scan existing lists for badges on initial load
@@ -2555,6 +2860,68 @@
       observer.disconnect();
       observer = null;
     }
+
+    // Remove broadcast buttons when features are disabled
+    removeBroadcastButtons();
+  }
+  
+  // 🧹 Cleanup global: event listeners et observers
+  function cleanupAll() {
+    // Stop polling
+    stopPolling();
+    
+    // Stop subscription monitoring
+    stopSubscriptionMonitoring();
+    
+    // Disconnect all observers
+    if (footerObserver) {
+      footerObserver.disconnect();
+      footerObserver = null;
+    }
+    if (inputObserver) {
+      inputObserver.disconnect();
+      inputObserver = null;
+    }
+    if (notesButtonObserver) {
+      notesButtonObserver.disconnect();
+      notesButtonObserver = null;
+    }
+    if (urlObserver) {
+      urlObserver.disconnect();
+      urlObserver = null;
+    }
+    
+    // Remove event listeners
+    if (globalClickHandler) {
+      document.removeEventListener("click", globalClickHandler);
+      globalClickHandler = null;
+    }
+    if (popstateHandler) {
+      window.removeEventListener("popstate", popstateHandler);
+      popstateHandler = null;
+    }
+    if (messageListener) {
+      try {
+        chrome.runtime.onMessage.removeListener(messageListener);
+      } catch (e) {
+        // Extension context may be invalidated
+      }
+      messageListener = null;
+    }
+    
+    // Abort any pending fetches
+    if (userInfoBoxFetchController) {
+      userInfoBoxFetchController.abort();
+      userInfoBoxFetchController = null;
+    }
+    if (badgeFetchController) {
+      badgeFetchController.abort();
+      badgeFetchController = null;
+    }
+    
+    // Clear caches
+    userInfoCache.clear();
+    totalSpentFetched.clear();
   }
 
   // Storage reading/watching
@@ -2570,10 +2937,12 @@
           window.chrome.storage.local.get(
             {
               access_token: null,
+              firebaseToken: null,
               mym_badges_enabled: false,
               mym_stats_enabled: false,
               mym_emoji_enabled: false,
               mym_notes_enabled: false,
+              mym_broadcast_enabled: false,
             },
             async (items) => {
               const last =
@@ -2584,24 +2953,26 @@
                   stats: false,
                   emoji: false,
                   notes: false,
+                  broadcast: false,
                 });
                 return;
               }
-              // Only enable features if token exists
-              const hasToken = !!items.access_token;
+              // Only enable features if token exists (Firebase ou Google)
+              const hasToken = !!(items.access_token || items.firebaseToken);
               if (!hasToken) {
                 resolve({
                   badges: false,
                   stats: false,
                   emoji: false,
                   notes: false,
+                  broadcast: false,
                 });
                 return;
               }
 
               // 🔒 Vérifier que l'abonnement est actif
               const isSubscriptionActive = await verifySubscriptionStatus(
-                items.access_token
+                items.firebaseToken || items.access_token
               );
               if (!isSubscriptionActive) {
                 resolve({
@@ -2609,28 +2980,38 @@
                   stats: false,
                   emoji: false,
                   notes: false,
+                  broadcast: false,
                 });
                 return;
               }
 
-              //   badges: items.mym_badges_enabled,
-              //   stats: items.mym_stats_enabled,
-              //   emoji: items.mym_emoji_enabled,
-              //   notes: items.mym_notes_enabled,
-              // });
-              resolve({
+              const flags = {
                 badges: Boolean(items.mym_badges_enabled),
                 stats: Boolean(items.mym_stats_enabled),
                 emoji: Boolean(items.mym_emoji_enabled),
                 notes: Boolean(items.mym_notes_enabled),
-              });
+                broadcast: Boolean(items.mym_broadcast_enabled),
+              };
+              resolve(flags);
             }
           );
         } catch (err) {
-          resolve({ badges: true, stats: true, emoji: true, notes: true });
+          resolve({
+            badges: true,
+            stats: true,
+            emoji: true,
+            notes: true,
+            broadcast: true,
+          });
         }
       } else {
-        resolve({ badges: true, stats: true, emoji: true, notes: true });
+        resolve({
+          badges: true,
+          stats: true,
+          emoji: true,
+          notes: true,
+          broadcast: true,
+        });
       }
     });
   }
@@ -2645,7 +3026,11 @@
       ) {
         try {
           window.chrome.storage.local.get(
-            { access_token: null, mym_live_enabled: defaultVal },
+            {
+              access_token: null,
+              firebaseToken: null,
+              mym_live_enabled: defaultVal,
+            },
             async (items) => {
               const last =
                 window.chrome.runtime && window.chrome.runtime.lastError;
@@ -2653,23 +3038,28 @@
                 resolve(false);
                 return;
               }
-              // Only enable if token exists
-              const hasToken = !!items.access_token;
+              // Only enable if token exists (Firebase ou Google)
+              const hasToken = !!(items.access_token || items.firebaseToken);
               if (!hasToken) {
+                console.log("🔒 Pas de token - fonctionnalités désactivées");
                 resolve(false);
                 return;
               }
 
               // 🔒 Vérifier que l'abonnement est actif
               const isSubscriptionActive = await verifySubscriptionStatus(
-                items.access_token
+                items.firebaseToken || items.access_token
               );
               if (!isSubscriptionActive) {
+                console.log(
+                  "🔒 Abonnement inactif - fonctionnalités désactivées"
+                );
                 resolve(false);
                 return;
               }
 
-              resolve(Boolean(items.mym_live_enabled));
+              const enabled = Boolean(items.mym_live_enabled);
+              resolve(enabled);
             }
           );
         } catch (err) {
@@ -2692,6 +3082,10 @@
 
         // 🔑 Si le token change (connexion/déconnexion), recharger les flags
         if (changes.access_token) {
+          // Vider le cache utilisateur lors du changement de token
+          userInfoCache.clear();
+          totalSpentFetched.clear();
+          
           readFeatureFlags().then((flags) => {
             badgesEnabled = flags.badges;
             statsEnabled = flags.stats;
@@ -2724,8 +3118,22 @@
         }
 
         if (changes.mym_live_enabled) {
-          const v = changes.mym_live_enabled.newValue;
-          if (v) startPolling();
+          const oldValue = changes.mym_live_enabled.oldValue;
+          const newValue = changes.mym_live_enabled.newValue;
+
+          // Si passage de activé à désactivé (révocation), recharger la page
+          if (oldValue === true && newValue === false) {
+            console.log(
+              "🚫 Licence révoquée - rechargement de la page pour nettoyer les fonctionnalités"
+            );
+            stopPolling();
+            setTimeout(() => {
+              window.location.reload();
+            }, 500);
+            return;
+          }
+
+          if (newValue) startPolling();
           else stopPolling();
         }
         if (changes.mym_badges_enabled) {
@@ -3058,15 +3466,18 @@
   }
 
   // Close picker when clicking outside
-  document.addEventListener("click", (e) => {
-    if (
-      emojiPickerVisible &&
-      !e.target.closest("#mym-emoji-picker") &&
-      !e.target.closest(".mym-emoji-button")
-    ) {
-      hideEmojiPicker();
-    }
-  });
+  if (!globalClickHandler) {
+    globalClickHandler = (e) => {
+      if (
+        emojiPickerVisible &&
+        !e.target.closest("#mym-emoji-picker") &&
+        !e.target.closest(".mym-emoji-button")
+      ) {
+        hideEmojiPicker();
+      }
+    };
+    document.addEventListener("click", globalClickHandler);
+  }
 
   // Ctrl+Enter to send message feature
   function setupCtrlEnterShortcut() {
@@ -3135,78 +3546,110 @@
 
   // Broadcast message feature
   function setupBroadcastButton() {
+    // Vérifier si la fonctionnalité broadcast est activée
+    chrome.storage.local.get(
+      ["mym_broadcast_enabled", "mym_live_enabled"],
+      (items) => {
+        const broadcastEnabled = items.mym_broadcast_enabled;
+        const globalEnabled = items.mym_live_enabled;
+
+        if (!broadcastEnabled || !globalEnabled) {
+          removeBroadcastButtons();
+          return;
+        }
+
+        const chatInputs = document.querySelectorAll(".chat-input--creators");
+
+        chatInputs.forEach((chatInput) => {
+          // Skip if already setup
+          if (chatInput.hasAttribute("data-mym-broadcast-setup")) {
+            return;
+          }
+          chatInput.setAttribute("data-mym-broadcast-setup", "true");
+
+          // Find the send button to clone its style
+          const sendButton = chatInput.querySelector(".chat-input__send");
+          if (!sendButton) {
+            return;
+          }
+
+          // Create broadcast button
+          const broadcastButton = document.createElement("button");
+          broadcastButton.type = "button";
+          broadcastButton.className =
+            "button button--icon button--primary chat-input__broadcast";
+          broadcastButton.title = "Envoyer à tous les contacts";
+          broadcastButton.style.cssText = `
+          margin-left: 8px;
+          background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important;
+        `;
+
+          broadcastButton.innerHTML = `
+          <span class="button__icon" aria-hidden="true">
+            <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path fill-rule="evenodd" clip-rule="evenodd" d="M10 3C6.13401 3 3 6.13401 3 10C3 13.866 6.13401 17 10 17C13.866 17 17 13.866 17 10C17 6.13401 13.866 3 10 3ZM10 5C7.23858 5 5 7.23858 5 10C5 12.7614 7.23858 15 10 15C12.7614 15 15 12.7614 15 10C15 7.23858 12.7614 5 10 5ZM10 7C8.34315 7 7 8.34315 7 10C7 11.6569 8.34315 13 10 13C11.6569 13 13 11.6569 13 10C13 8.34315 11.6569 7 10 7Z" fill="white"/>
+              <circle cx="10" cy="10" r="1.5" fill="white"/>
+            </svg>
+          </span>
+        `;
+
+          // Add click handler
+          broadcastButton.addEventListener("click", async () => {
+            const textarea = chatInput.querySelector("textarea");
+            if (!textarea) return;
+
+            const message = textarea.value.trim();
+            if (!message) {
+              alert("Veuillez entrer un message à diffuser");
+              return;
+            }
+
+            if (
+              !confirm(
+                `Êtes-vous sûr de vouloir envoyer ce message à tous vos contacts ?\n\n"${message}"`
+              )
+            ) {
+              return;
+            }
+
+            // Disable button during broadcast
+            broadcastButton.disabled = true;
+            broadcastButton.style.opacity = "0.5";
+
+            try {
+              await broadcastMessage(message);
+              textarea.value = "";
+              alert("Message diffusé avec succès à tous vos contacts !");
+            } catch (error) {
+              console.error("Erreur lors de la diffusion:", error);
+              alert("Erreur lors de la diffusion du message");
+            } finally {
+              broadcastButton.disabled = false;
+              broadcastButton.style.opacity = "1";
+            }
+          });
+
+          // Insert button after send button
+          sendButton.parentNode.insertBefore(
+            broadcastButton,
+            sendButton.nextSibling
+          );
+        });
+      }
+    ); // Close chrome.storage.local.get callback
+  }
+
+  // Remove broadcast buttons when features are disabled
+  function removeBroadcastButtons() {
+    const broadcastButtons = document.querySelectorAll(
+      ".chat-input__broadcast"
+    );
+    broadcastButtons.forEach((button) => button.remove());
+
+    // Remove setup markers so buttons can be recreated later if needed
     const chatInputs = document.querySelectorAll(".chat-input--creators");
-
     chatInputs.forEach((chatInput) => {
-      // Skip if already setup
-      if (chatInput.hasAttribute("data-mym-broadcast-setup")) return;
-      chatInput.setAttribute("data-mym-broadcast-setup", "true");
-
-      // Find the send button to clone its style
-      const sendButton = chatInput.querySelector(".chat-input__send");
-      if (!sendButton) return;
-
-      // Create broadcast button
-      const broadcastButton = document.createElement("button");
-      broadcastButton.type = "button";
-      broadcastButton.className =
-        "button button--icon button--primary chat-input__broadcast";
-      broadcastButton.title = "Envoyer à tous les contacts";
-      broadcastButton.style.cssText = `
-        margin-left: 8px;
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important;
-      `;
-
-      broadcastButton.innerHTML = `
-        <span class="button__icon" aria-hidden="true">
-          <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <path fill-rule="evenodd" clip-rule="evenodd" d="M10 3C6.13401 3 3 6.13401 3 10C3 13.866 6.13401 17 10 17C13.866 17 17 13.866 17 10C17 6.13401 13.866 3 10 3ZM10 5C7.23858 5 5 7.23858 5 10C5 12.7614 7.23858 15 10 15C12.7614 15 15 12.7614 15 10C15 7.23858 12.7614 5 10 5ZM10 7C8.34315 7 7 8.34315 7 10C7 11.6569 8.34315 13 10 13C11.6569 13 13 11.6569 13 10C13 8.34315 11.6569 7 10 7Z" fill="white"/>
-            <circle cx="10" cy="10" r="1.5" fill="white"/>
-          </svg>
-        </span>
-      `;
-
-      // Add click handler
-      broadcastButton.addEventListener("click", async () => {
-        const textarea = chatInput.querySelector("textarea");
-        if (!textarea) return;
-
-        const message = textarea.value.trim();
-        if (!message) {
-          alert("Veuillez entrer un message à diffuser");
-          return;
-        }
-
-        if (
-          !confirm(
-            `Êtes-vous sûr de vouloir envoyer ce message à tous vos contacts ?\n\n"${message}"`
-          )
-        ) {
-          return;
-        }
-
-        // Disable button during broadcast
-        broadcastButton.disabled = true;
-        broadcastButton.style.opacity = "0.5";
-
-        try {
-          await broadcastMessage(message);
-          textarea.value = "";
-          alert("Message diffusé avec succès à tous vos contacts !");
-        } catch (error) {
-          console.error("Erreur lors de la diffusion:", error);
-          alert("Erreur lors de la diffusion du message");
-        } finally {
-          broadcastButton.disabled = false;
-          broadcastButton.style.opacity = "1";
-        }
-      });
-
-      // Insert button after send button
-      sendButton.parentNode.insertBefore(
-        broadcastButton,
-        sendButton.nextSibling
-      );
+      chatInput.removeAttribute("data-mym-broadcast-setup");
     });
   }
 
@@ -3307,6 +3750,20 @@
   function createNotesPanel() {
     if (document.getElementById("mym-notes-panel")) return;
 
+    // Vérifier si l'extension est encore valide
+    try {
+      if (!chrome.runtime?.id) {
+        alert("⚠️ Extension rechargée. Veuillez rafraîchir la page pour utiliser les notes.");
+        return;
+      }
+      // Test chrome.storage access
+      chrome.storage.sync.get(["test"], () => {});
+    } catch (error) {
+      console.warn("[MYM] Extension context invalidated:", error);
+      alert("⚠️ Extension rechargée. Veuillez rafraîchir la page pour utiliser les notes.");
+      return;
+    }
+
     // Store current chat ID
     currentChatIdForNotes = getChatId();
 
@@ -3322,7 +3779,7 @@
       border-radius: 12px;
       box-shadow: 0 4px 12px rgba(0,0,0,0.25);
       z-index: 9999;
-      padding: 16px;
+      padding: 8px;
       font-family: system-ui, -apple-system, sans-serif;
       color: white;
     `;
@@ -3425,9 +3882,188 @@
     };
     saveBtn.onclick = () => saveUserNotes();
 
+    // Templates section
+    const templatesContainer = document.createElement("div");
+    templatesContainer.style.cssText = `
+      margin-top: 16px;
+      padding-top: 12px;
+      border-top: 1px solid rgba(255, 255, 255, 0.2);
+    `;
+
+    const templatesTitle = document.createElement("div");
+    templatesTitle.textContent = "📋 Templates rapides";
+    templatesTitle.style.cssText = `
+      font-size: 13px;
+      font-weight: 600;
+      margin-bottom: 8px;
+      color: rgba(255, 255, 255, 0.9);
+    `;
+
+    const templatesGrid = document.createElement("div");
+    templatesGrid.style.cssText = `
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 6px;
+    `;
+
+    // Default templates
+    const defaultTemplates = [
+      "✅ Validé",
+      "⏰ En attente",
+      "📸 Photos demandées",
+      "💰 Paiement reçu",
+      "📝 À recontacter",
+      "⭐ VIP",
+      "🎁 Offre spéciale envoyée\nMerci pour votre intérêt",
+      "❌ Pas intéressé",
+    ];
+
+    // Load custom templates from storage
+    if (!chrome.runtime?.id) {
+      console.warn('[MYM] Extension context invalidated, using default templates');
+      // Use default templates without storage
+      const templates = defaultTemplates;
+      templatesGrid.innerHTML = '';
+      
+      templates.forEach((template, index) => {
+        const btn = document.createElement("button");
+        const label = template.split('\n')[0].substring(0, 20) + (template.length > 20 ? '...' : '');
+        btn.textContent = label;
+        btn.title = template;
+        btn.style.cssText = `
+          padding: 6px 10px;
+          background: rgba(255, 255, 255, 0.15);
+          color: white;
+          border: 1px solid rgba(255, 255, 255, 0.25);
+          border-radius: 6px;
+          font-size: 12px;
+          cursor: pointer;
+          transition: all 0.2s;
+          text-align: left;
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+        `;
+        btn.onmouseenter = () => {
+          btn.style.background = "rgba(255, 255, 255, 0.25)";
+          btn.style.transform = "translateY(-1px)";
+        };
+        btn.onmouseleave = () => {
+          btn.style.background = "rgba(255, 255, 255, 0.15)";
+          btn.style.transform = "translateY(0)";
+        };
+        btn.onclick = () => {
+          const chatTextarea = document.querySelector('textarea.input__input--textarea');
+          if (chatTextarea) {
+            const currentText = chatTextarea.value;
+            const newText = currentText ? currentText + '\n' + template : template;
+            chatTextarea.value = newText;
+            const event = new Event('input', { bubbles: true });
+            chatTextarea.dispatchEvent(event);
+            chatTextarea.focus();
+          } else {
+            alert('⚠️ Textarea de chat non trouvé. Assurez-vous d\'être dans une conversation.');
+          }
+        };
+        templatesGrid.appendChild(btn);
+      });
+      return;
+    }
+
+    try {
+      chrome.storage.sync.get(['mym_note_templates'], (result) => {
+        if (chrome.runtime.lastError) {
+          console.warn('[MYM] Error loading templates:', chrome.runtime.lastError);
+          return;
+        }
+        const templates = result.mym_note_templates || defaultTemplates;
+      
+      templatesGrid.innerHTML = ''; // Clear existing
+      
+      templates.forEach((template, index) => {
+        const btn = document.createElement("button");
+        // Show first line or first 20 chars as button label
+        const label = template.split('\n')[0].substring(0, 20) + (template.length > 20 ? '...' : '');
+        btn.textContent = label;
+        btn.title = template; // Show full template on hover
+        btn.style.cssText = `
+          padding: 6px 10px;
+          background: rgba(255, 255, 255, 0.15);
+          color: white;
+          border: 1px solid rgba(255, 255, 255, 0.25);
+          border-radius: 6px;
+          font-size: 12px;
+          cursor: pointer;
+          transition: all 0.2s;
+          text-align: left;
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+        `;
+        btn.onmouseenter = () => {
+          btn.style.background = "rgba(255, 255, 255, 0.25)";
+          btn.style.transform = "translateY(-1px)";
+        };
+        btn.onmouseleave = () => {
+          btn.style.background = "rgba(255, 255, 255, 0.15)";
+          btn.style.transform = "translateY(0)";
+        };
+        btn.onclick = () => {
+          // Trouver le textarea de chat MYM
+          const chatTextarea = document.querySelector('textarea.input__input--textarea');
+          if (chatTextarea) {
+            const currentText = chatTextarea.value;
+            const newText = currentText ? currentText + '\n' + template : template;
+            chatTextarea.value = newText;
+            
+            // Trigger input event pour que MYM détecte le changement
+            const event = new Event('input', { bubbles: true });
+            chatTextarea.dispatchEvent(event);
+            
+            // Focus sur le textarea
+            chatTextarea.focus();
+          } else {
+            alert('⚠️ Textarea de chat non trouvé. Assurez-vous d\'être dans une conversation.');
+          }
+        };
+        
+        templatesGrid.appendChild(btn);
+      });
+    });
+    } catch (error) {
+      console.error('[MYM] Error loading templates from storage:', error);
+    }
+
+    const manageTemplatesBtn = document.createElement("button");
+    manageTemplatesBtn.textContent = "⚙️ Gérer les templates";
+    manageTemplatesBtn.style.cssText = `
+      margin-top: 8px;
+      width: 100%;
+      padding: 6px;
+      background: rgba(255, 255, 255, 0.1);
+      color: rgba(255, 255, 255, 0.8);
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      border-radius: 6px;
+      font-size: 11px;
+      cursor: pointer;
+      transition: all 0.2s;
+    `;
+    manageTemplatesBtn.onmouseenter = () => {
+      manageTemplatesBtn.style.background = "rgba(255, 255, 255, 0.15)";
+    };
+    manageTemplatesBtn.onmouseleave = () => {
+      manageTemplatesBtn.style.background = "rgba(255, 255, 255, 0.1)";
+    };
+    manageTemplatesBtn.onclick = () => openTemplateManager(templatesGrid);
+
+    templatesContainer.appendChild(templatesTitle);
+    templatesContainer.appendChild(templatesGrid);
+    templatesContainer.appendChild(manageTemplatesBtn);
+
     panel.appendChild(header);
     panel.appendChild(textarea);
     panel.appendChild(saveBtn);
+    panel.appendChild(templatesContainer);
 
     document.body.appendChild(panel);
 
@@ -3538,6 +4174,310 @@
         textarea.disabled = true;
       }
     }
+  }
+
+  function openTemplateManager(templatesGrid) {
+    // Create modal for managing templates
+    const modal = document.createElement("div");
+    modal.style.cssText = `
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0, 0, 0, 0.7);
+      z-index: 10000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    `;
+
+    const content = document.createElement("div");
+    content.style.cssText = `
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      border-radius: 12px;
+      padding: 24px;
+      width: 90%;
+      max-width: 500px;
+      max-height: 80vh;
+      overflow-y: auto;
+      color: white;
+    `;
+
+    const title = document.createElement("h3");
+    title.textContent = "⚙️ Gérer les templates";
+    title.style.cssText = `
+      margin: 0 0 16px 0;
+      font-size: 18px;
+      font-weight: 600;
+    `;
+
+    const description = document.createElement("p");
+    description.textContent = "Ajoutez ou modifiez vos templates ci-dessous. Utilisez le bouton + pour ajouter un nouveau template.";
+    description.style.cssText = `
+      margin: 0 0 12px 0;
+      font-size: 13px;
+      opacity: 0.9;
+    `;
+
+    const templatesListContainer = document.createElement("div");
+    templatesListContainer.style.cssText = `
+      max-height: 400px;
+      overflow-y: auto;
+      margin-bottom: 12px;
+    `;
+
+    const addTemplateBtn = document.createElement("button");
+    addTemplateBtn.textContent = "+ Ajouter un template";
+    addTemplateBtn.style.cssText = `
+      width: 100%;
+      padding: 8px;
+      background: rgba(255, 255, 255, 0.2);
+      color: white;
+      border: 1px solid rgba(255, 255, 255, 0.3);
+      border-radius: 6px;
+      font-size: 13px;
+      cursor: pointer;
+      transition: all 0.2s;
+      margin-bottom: 12px;
+    `;
+    addTemplateBtn.onmouseenter = () => addTemplateBtn.style.background = "rgba(255, 255, 255, 0.3)";
+    addTemplateBtn.onmouseleave = () => addTemplateBtn.style.background = "rgba(255, 255, 255, 0.2)";
+
+    function createTemplateInput(text = '', index = 0) {
+      const templateItem = document.createElement("div");
+      templateItem.style.cssText = `
+        margin-bottom: 12px;
+        padding: 12px;
+        background: rgba(255, 255, 255, 0.1);
+        border-radius: 8px;
+        position: relative;
+      `;
+
+      const templateTextarea = document.createElement("textarea");
+      templateTextarea.value = text;
+      templateTextarea.placeholder = "Entrez votre template (multi-lignes autorisées)";
+      templateTextarea.style.cssText = `
+        width: 100%;
+        min-height: 60px;
+        padding: 8px;
+        border: 1px solid rgba(255, 255, 255, 0.2);
+        border-radius: 6px;
+        font-size: 13px;
+        font-family: system-ui, -apple-system, sans-serif;
+        resize: vertical;
+        box-sizing: border-box;
+        outline: none;
+        background: rgba(255, 255, 255, 0.95);
+        color: #333;
+        margin-bottom: 8px;
+      `;
+
+      const deleteBtn = document.createElement("button");
+      deleteBtn.textContent = "🗑️ Supprimer";
+      deleteBtn.style.cssText = `
+        padding: 6px 12px;
+        background: rgba(220, 38, 38, 0.8);
+        color: white;
+        border: none;
+        border-radius: 6px;
+        font-size: 12px;
+        cursor: pointer;
+        transition: all 0.2s;
+      `;
+      deleteBtn.onmouseenter = () => deleteBtn.style.background = "rgba(220, 38, 38, 1)";
+      deleteBtn.onmouseleave = () => deleteBtn.style.background = "rgba(220, 38, 38, 0.8)";
+      deleteBtn.onclick = () => templateItem.remove();
+
+      templateItem.appendChild(templateTextarea);
+      templateItem.appendChild(deleteBtn);
+      
+      return templateItem;
+    }
+
+    // Load current templates
+    if (!chrome.runtime?.id) {
+      console.warn('[MYM] Extension context invalidated in template manager');
+      alert('⚠️ Extension rechargée. Veuillez rafraîchir la page.');
+      modal.remove();
+      return;
+    }
+
+    try {
+      chrome.storage.sync.get(['mym_note_templates'], (result) => {
+        if (chrome.runtime.lastError) {
+          console.warn('[MYM] Error loading templates:', chrome.runtime.lastError);
+          return;
+        }
+        const defaultTemplates = [
+          "✅ Validé",
+          "⏰ En attente",
+          "📸 Photos demandées",
+          "💰 Paiement reçu",
+          "📝 À recontacter",
+          "⭐ VIP",
+          "🎁 Offre spéciale envoyée\nMerci pour votre intérêt",
+          "❌ Pas intéressé",
+        ];
+        const templates = result.mym_note_templates || defaultTemplates;
+        
+        templates.forEach((template, index) => {
+          templatesListContainer.appendChild(createTemplateInput(template, index));
+        });
+      });
+    } catch (error) {
+      console.error('[MYM] Error in template manager storage access:', error);
+    }
+
+    addTemplateBtn.onclick = () => {
+      const newInput = createTemplateInput('', templatesListContainer.children.length);
+      templatesListContainer.appendChild(newInput);
+      newInput.querySelector('textarea').focus();
+    };
+
+    const buttonsContainer = document.createElement("div");
+    buttonsContainer.style.cssText = `
+      display: flex;
+      gap: 8px;
+      margin-top: 16px;
+    `;
+
+    const saveBtn = document.createElement("button");
+    saveBtn.textContent = "💾 Enregistrer";
+    saveBtn.style.cssText = `
+      flex: 1;
+      padding: 10px;
+      background: rgba(255, 255, 255, 0.2);
+      color: white;
+      border: 1px solid rgba(255, 255, 255, 0.3);
+      border-radius: 8px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+    `;
+    saveBtn.onmouseenter = () => saveBtn.style.background = "rgba(255, 255, 255, 0.3)";
+    saveBtn.onmouseleave = () => saveBtn.style.background = "rgba(255, 255, 255, 0.2)";
+    saveBtn.onclick = () => {
+      if (!chrome.runtime?.id) {
+        alert('⚠️ Extension rechargée. Veuillez rafraîchir la page.');
+        return;
+      }
+
+      // Collect all templates from textareas
+      const templateInputs = templatesListContainer.querySelectorAll('textarea');
+      const templates = Array.from(templateInputs)
+        .map(ta => ta.value.trim())
+        .filter(t => t.length > 0);
+      
+      try {
+        chrome.storage.sync.set({ mym_note_templates: templates }, () => {
+          if (chrome.runtime.lastError) {
+            console.error('[MYM] Error saving templates:', chrome.runtime.lastError);
+            alert('❌ Erreur lors de la sauvegarde des templates');
+            return;
+          }
+
+          // Refresh templates grid
+          chrome.storage.sync.get(['mym_note_templates'], (result) => {
+            if (chrome.runtime.lastError) {
+              console.error('[MYM] Error loading templates:', chrome.runtime.lastError);
+              return;
+            }
+            const templates = result.mym_note_templates || [];
+            templatesGrid.innerHTML = '';
+          
+          const noteTextarea = document.getElementById('mym-notes-textarea');
+          
+          templates.forEach((template) => {
+            const btn = document.createElement("button");
+            // Show first line or first 20 chars as button label
+            const label = template.split('\n')[0].substring(0, 20) + (template.length > 20 ? '...' : '');
+            btn.textContent = label;
+            btn.title = template; // Show full template on hover
+            btn.style.cssText = `
+              padding: 6px 10px;
+              background: rgba(255, 255, 255, 0.15);
+              color: white;
+              border: 1px solid rgba(255, 255, 255, 0.25);
+              border-radius: 6px;
+              font-size: 12px;
+              cursor: pointer;
+              transition: all 0.2s;
+              text-align: left;
+              white-space: nowrap;
+              overflow: hidden;
+              text-overflow: ellipsis;
+            `;
+            btn.onmouseenter = () => {
+              btn.style.background = "rgba(255, 255, 255, 0.25)";
+              btn.style.transform = "translateY(-1px)";
+            };
+            btn.onmouseleave = () => {
+              btn.style.background = "rgba(255, 255, 255, 0.15)";
+              btn.style.transform = "translateY(0)";
+            };
+            btn.onclick = () => {
+              // Trouver le textarea de chat MYM
+              const chatTextarea = document.querySelector('textarea.input__input--textarea');
+              if (chatTextarea) {
+                const currentText = chatTextarea.value;
+                const newText = currentText ? currentText + '\n' + template : template;
+                chatTextarea.value = newText;
+                
+                // Trigger input event pour que MYM détecte le changement
+                const event = new Event('input', { bubbles: true });
+                chatTextarea.dispatchEvent(event);
+                
+                // Focus sur le textarea
+                chatTextarea.focus();
+              }
+            };
+            
+            templatesGrid.appendChild(btn);
+          });
+        });
+        
+        modal.remove();
+      });
+      } catch (error) {
+        console.error('[MYM] Error saving templates:', error);
+        alert('❌ Erreur lors de la sauvegarde des templates');
+      }
+    };
+
+    const cancelBtn = document.createElement("button");
+    cancelBtn.textContent = "Annuler";
+    cancelBtn.style.cssText = `
+      flex: 1;
+      padding: 10px;
+      background: rgba(255, 255, 255, 0.1);
+      color: white;
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      border-radius: 8px;
+      font-size: 14px;
+      cursor: pointer;
+      transition: all 0.2s;
+    `;
+    cancelBtn.onmouseenter = () => cancelBtn.style.background = "rgba(255, 255, 255, 0.15)";
+    cancelBtn.onmouseleave = () => cancelBtn.style.background = "rgba(255, 255, 255, 0.1)";
+    cancelBtn.onclick = () => modal.remove();
+
+    buttonsContainer.appendChild(saveBtn);
+    buttonsContainer.appendChild(cancelBtn);
+
+    content.appendChild(title);
+    content.appendChild(description);
+    content.appendChild(addTemplateBtn);
+    content.appendChild(templatesListContainer);
+    content.appendChild(buttonsContainer);
+
+    modal.appendChild(content);
+    modal.onclick = (e) => {
+      if (e.target === modal) modal.remove();
+    };
+
+    document.body.appendChild(modal);
   }
 
   function saveUserNotes(isAutoSave = false) {
@@ -3735,15 +4675,38 @@
     notesEnabled = flags.notes;
 
     watchStorageChanges();
-    if (enabled) startPolling();
-    else stopPolling();
+    if (enabled) {
+      startPolling();
+    } else {
+      stopPolling();
+    }
+    
+    // 📱 Page Visibility API - Arrêter le polling quand l'onglet est inactif
+    document.addEventListener("visibilitychange", () => {
+      if (document.hidden) {
+        // Page devenue invisible - arrêter le polling
+        if (pollHandle) {
+          clearInterval(pollHandle);
+          pollHandle = null;
+        }
+      } else {
+        // Page devenue visible - redémarrer le polling si activé
+        readEnabledFlag(false).then((isEnabled) => {
+          if (isEnabled && !pollHandle) {
+            startPolling();
+          }
+        });
+      }
+    });
 
     // Remove sidebar footer immediately and watch for changes
     removeSidebarFooter();
-    const footerObserver = new MutationObserver(() => {
-      removeSidebarFooter();
-    });
-    footerObserver.observe(document.body, { childList: true, subtree: true });
+    if (!footerObserver) {
+      footerObserver = new MutationObserver(() => {
+        removeSidebarFooter();
+      });
+      footerObserver.observe(document.body, { childList: true, subtree: true });
+    }
 
     // Setup emoji buttons for existing inputs
     setupEmojiButtonsForInputs();
@@ -3756,16 +4719,18 @@
 
     // Watch for new inputs being added to the page (avec throttling)
     let inputObserverTimeout;
-    const inputObserver = new MutationObserver(() => {
-      if (inputObserverTimeout) return;
-      inputObserverTimeout = setTimeout(() => {
-        setupEmojiButtonsForInputs();
-        setupCtrlEnterShortcut();
-        setupBroadcastButton();
-        inputObserverTimeout = null;
-      }, 500); // Throttle à 500ms
-    });
-    inputObserver.observe(document.body, { childList: true, subtree: true });
+    if (!inputObserver) {
+      inputObserver = new MutationObserver(() => {
+        if (inputObserverTimeout) return;
+        inputObserverTimeout = setTimeout(() => {
+          setupEmojiButtonsForInputs();
+          setupCtrlEnterShortcut();
+          setupBroadcastButton();
+          inputObserverTimeout = null;
+        }, 500); // Throttle à 500ms
+      });
+      inputObserver.observe(document.body, { childList: true, subtree: true });
+    }
 
     // Create notes button if on chat page
     if (isChatPage) {
@@ -3773,29 +4738,49 @@
 
       // Watch for the notes button being removed and recreate it (avec throttling)
       let notesButtonTimeout;
-      const notesButtonObserver = new MutationObserver(() => {
-        if (notesButtonTimeout) return;
-        notesButtonTimeout = setTimeout(() => {
-          if (!document.getElementById("mym-notes-button") && notesEnabled) {
-            createNotesButton();
-          }
-          notesButtonTimeout = null;
-        }, 1000); // Throttle à 1s
-      });
-      notesButtonObserver.observe(document.body, {
-        childList: true,
-        subtree: true,
-      });
+      if (!notesButtonObserver) {
+        notesButtonObserver = new MutationObserver(() => {
+          if (notesButtonTimeout) return;
+          notesButtonTimeout = setTimeout(() => {
+            if (!document.getElementById("mym-notes-button") && notesEnabled) {
+              createNotesButton();
+            }
+            notesButtonTimeout = null;
+          }, 1000); // Throttle à 1s
+        });
+        notesButtonObserver.observe(document.body, {
+          childList: true,
+          subtree: true,
+        });
+      }
 
       // Watch for URL changes (navigation to different chats)
       let lastUrl = location.href;
-      const urlObserver = new MutationObserver(() => {
-        const currentUrl = location.href;
-        if (currentUrl !== lastUrl) {
-          lastUrl = currentUrl;
-          const newChatId = getChatId();
+      if (!urlObserver) {
+        urlObserver = new MutationObserver(() => {
+          const currentUrl = location.href;
+          if (currentUrl !== lastUrl) {
+            lastUrl = currentUrl;
+            const newChatId = getChatId();
 
-          // If chat ID changed and notes panel is open, refresh it
+            // If chat ID changed and notes panel is open, refresh it
+            if (newChatId && newChatId !== currentChatIdForNotes) {
+              const panel = document.getElementById("mym-notes-panel");
+              if (panel) {
+                panel.remove();
+                createNotesPanel();
+              }
+              currentChatIdForNotes = newChatId;
+            }
+          }
+        });
+        urlObserver.observe(document.body, { childList: true, subtree: true });
+      }
+
+      // Also watch for popstate events (browser back/forward)
+      if (!popstateHandler) {
+        popstateHandler = () => {
+          const newChatId = getChatId();
           if (newChatId && newChatId !== currentChatIdForNotes) {
             const panel = document.getElementById("mym-notes-panel");
             if (panel) {
@@ -3804,23 +4789,55 @@
             }
             currentChatIdForNotes = newChatId;
           }
-        }
-      });
-      urlObserver.observe(document.body, { childList: true, subtree: true });
-
-      // Also watch for popstate events (browser back/forward)
-      window.addEventListener("popstate", () => {
-        const newChatId = getChatId();
-        if (newChatId && newChatId !== currentChatIdForNotes) {
-          const panel = document.getElementById("mym-notes-panel");
-          if (panel) {
-            panel.remove();
-            createNotesPanel();
-          }
-          currentChatIdForNotes = newChatId;
-        }
-      });
+        };
+        window.addEventListener("popstate", popstateHandler);
+      }
     }
+
+    // Écouter les messages du background script
+    if (!messageListener) {
+      messageListener = (message, sender, sendResponse) => {
+        if (message.action === "featuresEnabled") {
+          console.log("🔓 Message reçu du background: fonctionnalités activées");
+          // Recharger les flags et redémarrer le polling
+          readFeatureFlags().then((flags) => {
+            badgesEnabled = flags.badges;
+            statsEnabled = flags.stats;
+            emojiEnabled = flags.emoji;
+            notesEnabled = flags.notes;
+            console.log("🔧 Flags rechargés:", flags);
+
+          readEnabledFlag(false).then((enabled) => {
+            if (enabled) {
+              console.log("✅ Redémarrage du polling");
+              startPolling();
+            }
+          });
+        });
+      }
+
+      if (message.action === "featuresDisabled") {
+        // Désactiver tous les flags et arrêter le polling
+        badgesEnabled = false;
+        statsEnabled = false;
+        emojiEnabled = false;
+        notesEnabled = false;
+        stopPolling();
+
+        // Recharger la page pour nettoyer toutes les fonctionnalités injectées
+        setTimeout(() => {
+          window.location.reload();
+        }, 500);
+      }
+    };
+    chrome.runtime.onMessage.addListener(messageListener);
+  }
+  
+  // Cleanup lors du unload de la page
+  window.addEventListener("beforeunload", () => {
+    cleanupAll();
+  });
+  
   })();
 })();
 
