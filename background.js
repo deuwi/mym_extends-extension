@@ -23,12 +23,13 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.type === "FIREBASE_TOKEN" && message.token) {
     console.log("✅ Background: Received Firebase token from web");
 
-    // Stocker le token + email + user_id ET activer toutes les features
+    // Stocker le token + email + user_id + timestamp ET activer toutes les features
     chrome.storage.local.set(
       {
         firebaseToken: message.token,
         user_email: message.user_email || "",
         user_id: message.user_id || "",
+        access_token_stored_at: Date.now(), // Important: stocker la date pour vérifier l'expiration
         // Activer toutes les fonctionnalités par défaut
         mym_live_enabled: true,
         mym_badges_enabled: true,

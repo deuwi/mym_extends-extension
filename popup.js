@@ -249,10 +249,11 @@
   async function checkSubscription() {
     return new Promise((resolve) => {
       chrome.storage.local.get(
-        ["firebaseToken", "access_token", "user_email"],
+        ["firebaseToken", "access_token", "user_email", "access_token_stored_at"],
         async (data) => {
           const token = data.firebaseToken || data.access_token;
           const email = data.user_email;
+          const tokenStoredAt = data.access_token_stored_at;
 
           if (!token && !email) {
             console.error("❌ Aucun token disponible");
@@ -260,6 +261,29 @@
             disableAllToggles();
             resolve();
             return;
+          }
+
+          // Vérifier l'âge du token
+          if (tokenStoredAt) {
+            const tokenAge = Date.now() - tokenStoredAt;
+            if (tokenAge > TOKEN_MAX_AGE) {
+              console.warn(
+                `⚠️ Token expiré (âge: ${Math.floor(tokenAge / (24 * 60 * 60 * 1000))} jours)`
+              );
+              chrome.storage.local.remove(
+                ["access_token", "firebaseToken", "access_token_stored_at", "user_id", "user_email"],
+                () => {
+                  showStatus(
+                    "⚠️ Votre session a expiré. Veuillez vous reconnecter.",
+                    "error"
+                  );
+                  showAuthSection();
+                  disableAllToggles();
+                  resolve();
+                }
+              );
+              return;
+            }
           }
 
           try {
