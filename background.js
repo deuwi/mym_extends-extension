@@ -5,6 +5,7 @@ importScripts("config.js");
 
 // Get API_BASE from global APP_CONFIG
 const API_BASE = globalThis.APP_CONFIG?.API_BASE || "https://mymchat.fr";
+const TOKEN_MAX_AGE = 30 * 24 * 60 * 60 * 1000; // 30 jours en millisecondes
 console.log(`🔧 Background loaded with API_BASE: ${API_BASE}`);
 
 // 🌉 Écouter les messages du auth-bridge (connexion Google depuis le site web)
@@ -278,14 +279,44 @@ async function checkAndEnableFeatures() {
 
     // Récupérer les données d'authentification
     const storageData = await new Promise((resolve) => {
-      chrome.storage.local.get(["firebaseToken", "user_email"], resolve);
+      chrome.storage.local.get(["firebaseToken", "user_email", "access_token_stored_at"], resolve);
     });
     const token = storageData.firebaseToken;
     const email = storageData.user_email;
+    const tokenStoredAt = storageData.access_token_stored_at;
 
     if (!token && !email) {
       console.log("ℹ️ Pas de token ni d'email - utilisateur non connecté");
       return;
+    }
+
+    // Vérifier l'âge du token
+    if (tokenStoredAt) {
+      const tokenAge = Date.now() - tokenStoredAt;
+      if (tokenAge > TOKEN_MAX_AGE) {
+        console.warn(
+          `⚠️ Token expiré (âge: ${Math.floor(tokenAge / (24 * 60 * 60 * 1000))} jours) - nettoyage`
+        );
+        await chrome.storage.local.remove([
+          "firebaseToken",
+          "access_token",
+          "access_token_stored_at",
+          "user_id",
+          "user_email",
+        ]);
+        
+        // Désactiver toutes les fonctionnalités
+        const allDisabled = {
+          mym_live_enabled: false,
+          mym_badges_enabled: false,
+          mym_stats_enabled: false,
+          mym_emoji_enabled: false,
+          mym_notes_enabled: false,
+          mym_broadcast_enabled: false,
+        };
+        await chrome.storage.local.set(allDisabled);
+        return;
+      }
     }
 
     console.log(
@@ -316,6 +347,28 @@ async function checkAndEnableFeatures() {
       console.warn(
         `⚠️ Réponse HTTP ${res.status} lors de la vérification de la licence`
       );
+      
+      // Si token expiré (401), déconnecter l'utilisateur
+      if (res.status === 401) {
+        console.warn("🔒 Token expiré - nettoyage des credentials");
+        await chrome.storage.local.remove([
+          "access_token",
+          "access_token_stored_at",
+          "user_id",
+          "user_email",
+        ]);
+        
+        // Désactiver toutes les fonctionnalités
+        const allDisabled = {
+          mym_live_enabled: false,
+          mym_badges_enabled: false,
+          mym_stats_enabled: false,
+          mym_emoji_enabled: false,
+          mym_notes_enabled: false,
+          mym_broadcast_enabled: false,
+        };
+        await chrome.storage.local.set(allDisabled);
+      }
       return;
     }
 

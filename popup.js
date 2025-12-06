@@ -3,6 +3,7 @@
   const API_BASE = window.APP_CONFIG?.API_BASE || "https://mymchat.fr";
   const SIGNIN_URL =
     window.APP_CONFIG?.SIGNIN_URL || "https://mymchat.fr/signin";
+  const TOKEN_MAX_AGE = 30 * 24 * 60 * 60 * 1000; // 30 jours en millisecondes
 
   console.log(`🔧 Popup loaded with API_BASE: ${API_BASE}`);
 
@@ -313,6 +314,33 @@
 
   async function verifyToken(token, email) {
     try {
+      // Vérifier l'âge du token
+      const result = await new Promise((resolve) => {
+        chrome.storage.local.get(["access_token_stored_at"], (items) => {
+          resolve(items.access_token_stored_at);
+        });
+      });
+
+      if (result) {
+        const tokenAge = Date.now() - result;
+        if (tokenAge > TOKEN_MAX_AGE) {
+          console.warn(
+            `⚠️ Token expiré (âge: ${Math.floor(tokenAge / (24 * 60 * 60 * 1000))} jours) - déconnexion`
+          );
+          chrome.storage.local.remove(
+            ["access_token", "access_token_stored_at", "user_id", "user_email"],
+            () => {
+              showStatus(
+                "⚠️ Votre session a expiré. Veuillez vous reconnecter.",
+                "error"
+              );
+              showAuthSection();
+            }
+          );
+          return;
+        }
+      }
+
       // Déterminer si on est en mode local
       const isLocal = window.APP_CONFIG?.ENVIRONMENT === "local";
 
@@ -332,6 +360,22 @@
         headers,
       });
       if (!res.ok) {
+        // Si token expiré (401), déconnecter l'utilisateur
+        if (res.status === 401) {
+          console.warn("🔒 Token expiré - déconnexion nécessaire");
+          chrome.storage.local.remove(
+            ["access_token", "access_token_stored_at", "user_id", "user_email"],
+            () => {
+              showStatus(
+                "⚠️ Votre session a expiré. Veuillez vous reconnecter.",
+                "error"
+              );
+              showAuthSection();
+            }
+          );
+          return;
+        }
+        
         // Erreur API - on affiche quand même l'interface utilisateur
         // Mais on informe que la vérification a échoué
         showUserSection(email, {
