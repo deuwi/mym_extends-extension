@@ -1610,11 +1610,9 @@
   // Injecter les styles CSS de l'extension
   function injectStyles() {
     if (document.getElementById("mym-live-style")) {
-      console.log("🎨 [CONTENT.JS] Styles déjà injectés");
       return; // Déjà injecté
     }
 
-    console.log("🎨 [CONTENT.JS] Injection des styles CSS...");
     const style = document.createElement("style");
     style.id = "mym-live-style";
     style.textContent = `
@@ -2410,12 +2408,6 @@
 
     isUpdatingUserInfoBox = true;
     currentUserInfoBoxUsername = username;
-    console.log(
-      "[MYM] 🔒 Flags set - isUpdatingUserInfoBox:",
-      isUpdatingUserInfoBox,
-      "currentUserInfoBoxUsername:",
-      currentUserInfoBoxUsername
-    );
 
     try {
       // Vérifier si la box existe déjà
