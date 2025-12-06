@@ -13,8 +13,16 @@
   // Boot (content script)
   // Inject a detector into page context to catch synchronous XHR usage
   try {
-    if (window.chrome && chrome.runtime && chrome.runtime.getURL) {
-      const url = chrome.runtime.getURL("detector.js");
+    // Firefox compatibility: use browser API if available
+    const runtimeAPI =
+      typeof browser !== "undefined" && browser.runtime
+        ? browser.runtime
+        : window.chrome && chrome.runtime
+        ? chrome.runtime
+        : null;
+
+    if (runtimeAPI && runtimeAPI.getURL) {
+      const url = runtimeAPI.getURL("detector.js");
       const s = document.createElement("script");
       s.src = url;
       s.onload = function () {
@@ -26,9 +34,8 @@
         s
       );
     }
-  } catch (e) {
-    // silent fail — do not log to console
-  }
+  } catch (e) {}
+
 
   function getChatId() {
     const el = document.querySelector("[data-chat-id]");
@@ -42,6 +49,7 @@
   }
 
   const chatId = getChatId();
+
   const isMymsPage =
     location.pathname.startsWith("/app/myms") ||
     document.querySelector(".page.my-myms") !== null;
@@ -59,10 +67,21 @@
   const CONTAINER_SELECTOR = ".discussions__chats";
   const DISCUSSIONS_SELECTOR = ".discussions, .page.my-myms";
   const NAV_SELECTOR = ".aside.sidebar, aside.sidebar";
-  const POLL_INTERVAL_MS = 10000; // 10s (optimisé)
-  const SUBSCRIPTION_CHECK_INTERVAL = 60 * 60 * 1000; // 1 heure
-  const USER_INFO_CACHE_DURATION = 2 * 60 * 1000; // 2 minutes (réduit pour éviter données obsolètes)
-  const API_BASE = globalThis.APP_CONFIG?.API_BASE || "http://127.0.0.1:8080";
+  const POLL_INTERVAL_MS =
+    (window.APP_CONFIG && window.APP_CONFIG.POLL_INTERVAL_MS) || 10000;
+  const SUBSCRIPTION_CHECK_INTERVAL =
+    (window.APP_CONFIG && window.APP_CONFIG.SUBSCRIPTION_CHECK_INTERVAL) ||
+    60 * 60 * 1000;
+  const USER_INFO_CACHE_DURATION =
+    (window.APP_CONFIG && window.APP_CONFIG.USER_INFO_CACHE_DURATION) ||
+    2 * 60 * 1000;
+  const LRU_CACHE_MAX_SIZE =
+    (window.APP_CONFIG && window.APP_CONFIG.LRU_CACHE_MAX_SIZE) || 100;
+  const MAX_PAGES_FETCH =
+    (window.APP_CONFIG && window.APP_CONFIG.MAX_PAGES_FETCH) || 10;
+  const API_BASE =
+    (globalThis.APP_CONFIG && globalThis.APP_CONFIG.API_BASE) ||
+    "http://127.0.0.1:8080";
 
   let knownChatIds = new Set();
   let knownListIds = new Set();
@@ -70,7 +89,7 @@
   let observer = null;
   let pollingInProgress = false;
   let discussionsInjected = false;
-  
+
   // Références pour cleanup
   let footerObserver = null;
   let inputObserver = null;
@@ -79,7 +98,72 @@
   let globalClickHandler = null;
   let popstateHandler = null;
   let messageListener = null;
-  
+
+  // 🛡️ Fonctions wrapper sécurisées pour chrome.storage
+  function safeStorageGet(area, keys) {
+    return new Promise((resolve) => {
+      if (!chrome.runtime || !chrome.runtime.id) {
+        resolve({});
+        return;
+      }
+      try {
+        const storageArea =
+          area === "sync" ? chrome.storage.sync : chrome.storage.local;
+        storageArea.get(keys, (items) => {
+          if (chrome.runtime.lastError) {
+            resolve({});
+            return;
+          }
+          resolve(items || {});
+        });
+      } catch (e) {
+        resolve({});
+      }
+    });
+  }
+
+  function safeStorageSet(area, items) {
+    return new Promise((resolve) => {
+      if (!chrome.runtime && chrome.runtime.id) {
+        resolve();
+        return;
+      }
+      try {
+        const storageArea =
+          area === "sync" ? chrome.storage.sync : chrome.storage.local;
+        storageArea.set(items, () => {
+          if (chrome.runtime.lastError) {
+            // Silent fail
+          }
+          resolve();
+        });
+      } catch (e) {
+        resolve();
+      }
+    });
+  }
+
+  function safeStorageRemove(area, keys) {
+    return new Promise((resolve) => {
+      if (!chrome.runtime && chrome.runtime.id) {
+        resolve();
+        return;
+      }
+      try {
+        const storageArea =
+          area === "sync" ? chrome.storage.sync : chrome.storage.local;
+        storageArea.remove(keys, () => {
+          if (chrome.runtime.lastError) {
+            // Silent fail
+          }
+          resolve();
+        });
+      } catch (e) {
+        resolve();
+      }
+    });
+  }
+
   // LRU Cache implementation to prevent unlimited memory growth
   class LRUCache {
     constructor(maxSize = 100) {
@@ -110,22 +194,22 @@
     clear() {
       this.cache.clear();
     }
-    
+
     has(key) {
       return this.cache.has(key);
     }
-    
+
     add(key) {
       this.set(key, true);
     }
-    
+
     delete(key) {
       this.cache.delete(key);
     }
   }
-  
-  const totalSpentFetched = new LRUCache(100); // Track which users we've already fetched total spent for (limited to 100)
-  const userInfoCache = new LRUCache(100); // Cache pour les infos utilisateur {username: {data, timestamp}}
+
+  const totalSpentFetched = new LRUCache(LRU_CACHE_MAX_SIZE);
+  const userInfoCache = new LRUCache(LRU_CACHE_MAX_SIZE);
   let userInfoBoxFetchController = null; // AbortController pour userInfoBox
   let badgeFetchController = null; // AbortController pour les badges
 
@@ -140,15 +224,17 @@
   function startSubscriptionMonitoring() {
     // Vérifier toutes les heures si l'abonnement est toujours actif
     if (subscriptionMonitoringInterval) return;
-    
+
     subscriptionMonitoringInterval = setInterval(async () => {
       // Vérifier si le contexte est toujours valide
-      if (!chrome.runtime?.id) {
-        console.warn("[MYM] Extension context invalidated, stopping subscription monitoring");
+      if (!chrome.runtime && chrome.runtime.id) {
+        console.warn(
+          "[MYM] Extension context invalidated, stopping subscription monitoring"
+        );
         stopSubscriptionMonitoring();
         return;
       }
-      
+
       const token = await getAccessToken();
       if (!token) return;
 
@@ -181,6 +267,20 @@
               showSubscriptionExpiredBanner();
               return;
             }
+
+            // Vérifier que la réponse est bien du JSON
+            const retryContentType = retryRes.headers.get("content-type");
+            if (
+              !retryContentType ||
+              !retryContentType.includes("application/json")
+            ) {
+              console.warn(
+                `[MYM] Réponse retry non-JSON reçue (${retryContentType})`
+              );
+              showSubscriptionExpiredBanner();
+              return;
+            }
+
             const retryData = await retryRes.json();
             if (
               retryData.email_verified === false ||
@@ -192,6 +292,15 @@
             return;
           }
           showSubscriptionExpiredBanner();
+          return;
+        }
+
+        // Vérifier que la réponse est bien du JSON
+        const contentType = res.headers.get("content-type");
+        if (!contentType || !contentType.includes("application/json")) {
+          console.warn(
+            `[MYM] Réponse non-JSON reçue (${contentType}), probablement une erreur serveur`
+          );
           return;
         }
 
@@ -212,7 +321,7 @@
       }
     }, SUBSCRIPTION_CHECK_INTERVAL);
   }
-  
+
   function stopSubscriptionMonitoring() {
     if (subscriptionMonitoringInterval) {
       clearInterval(subscriptionMonitoringInterval);
@@ -220,33 +329,9 @@
     }
   }
 
-  function getAccessToken() {
-    return new Promise((resolve) => {
-      // Vérifier si le contexte d'extension est valide
-      if (!chrome.runtime?.id) {
-        console.warn("[MYM] Extension context invalidated in getAccessToken");
-        resolve(null);
-        return;
-      }
-      
-      if (typeof window.chrome !== "undefined" && window.chrome.storage) {
-        try {
-          window.chrome.storage.local.get(["access_token"], (items) => {
-            if (chrome.runtime.lastError) {
-              console.warn("[MYM] Error getting access token:", chrome.runtime.lastError);
-              resolve(null);
-              return;
-            }
-            resolve(items.access_token || null);
-          });
-        } catch (error) {
-          console.warn("[MYM] Exception in getAccessToken:", error);
-          resolve(null);
-        }
-      } else {
-        resolve(null);
-      }
-    });
+  async function getAccessToken() {
+    const items = await safeStorageGet("local", ["access_token"]);
+    return items.access_token || null;
   }
 
   // 🔄 Tenter de rafraîchir le token expiré en demandant à la page web
@@ -300,31 +385,44 @@
     return new Promise((resolve) => {
       if (typeof window.chrome !== "undefined" && window.chrome.storage) {
         // Vérifier si on est dans une boucle de rechargement
-        const reloadCount = sessionStorage.getItem('mym_reload_count') || '0';
-        const lastReload = sessionStorage.getItem('mym_last_reload') || '0';
+        const RELOAD_THRESHOLD =
+          (window.APP_CONFIG && window.APP_CONFIG.RELOAD_LOOP_THRESHOLD) || 3;
+        const RELOAD_WINDOW =
+          (window.APP_CONFIG && window.APP_CONFIG.RELOAD_LOOP_WINDOW) || 30000;
+
+        const reloadCount = sessionStorage.getItem("mym_reload_count") || "0";
+        const lastReload = sessionStorage.getItem("mym_last_reload") || "0";
         const now = Date.now();
         const timeSinceLastReload = now - parseInt(lastReload);
-        
-        // Si plus de 3 rechargements en moins de 30 secondes, ne pas recharger
-        if (parseInt(reloadCount) >= 3 && timeSinceLastReload < 30000) {
-          console.warn("⚠️ Boucle de rechargement détectée - Arrêt du rechargement automatique");
+
+        // Détecter les boucles de rechargement
+        if (
+          parseInt(reloadCount) >= RELOAD_THRESHOLD &&
+          timeSinceLastReload < RELOAD_WINDOW
+        ) {
+          console.warn(
+            "⚠️ Boucle de rechargement détectée - Arrêt du rechargement automatique"
+          );
           // Supprimer le token et les données utilisateur sans recharger
           window.chrome.storage.local.remove(
             ["access_token", "access_token_stored_at", "user_id", "user_email"],
             () => {
-              console.log("🚪 Utilisateur déconnecté - Token expiré (sans rechargement)");
+              console.log(
+                "🚪 Utilisateur déconnecté - Token expiré (sans rechargement)"
+              );
               showSubscriptionExpiredBanner();
               resolve();
             }
           );
           return;
         }
-        
+
         // Incrémenter le compteur de rechargement
-        const newCount = timeSinceLastReload < 30000 ? parseInt(reloadCount) + 1 : 1;
-        sessionStorage.setItem('mym_reload_count', newCount.toString());
-        sessionStorage.setItem('mym_last_reload', now.toString());
-        
+        const newCount =
+          timeSinceLastReload < RELOAD_WINDOW ? parseInt(reloadCount) + 1 : 1;
+        sessionStorage.setItem("mym_reload_count", newCount.toString());
+        sessionStorage.setItem("mym_last_reload", now.toString());
+
         // Supprimer le token et les données utilisateur
         window.chrome.storage.local.remove(
           ["access_token", "access_token_stored_at", "user_id", "user_email"],
@@ -342,42 +440,23 @@
   }
 
   // Fonctions pour gérer les catégories d'utilisateurs
-  function getUserCategory(username) {
-    return new Promise((resolve) => {
-      if (typeof window.chrome !== "undefined" && window.chrome.storage) {
-        window.chrome.storage.local.get(["user_categories"], (items) => {
-          const categories = items.user_categories || {};
-          resolve(categories[username] || null);
-        });
-      } else {
-        resolve(null);
-      }
-    });
+  async function getUserCategory(username) {
+    const items = await safeStorageGet("local", ["user_categories"]);
+    const categories = items.user_categories || {};
+    return categories[username] || null;
   }
 
-  function setUserCategory(username, category) {
-    return new Promise((resolve) => {
-      if (typeof window.chrome !== "undefined" && window.chrome.storage) {
-        window.chrome.storage.local.get(["user_categories"], (items) => {
-          const categories = items.user_categories || {};
+  async function setUserCategory(username, category) {
+    const items = await safeStorageGet("local", ["user_categories"]);
+    const categories = items.user_categories || {};
 
-          if (category) {
-            categories[username] = category;
-          } else {
-            delete categories[username];
-          }
+    if (category) {
+      categories[username] = category;
+    } else {
+      delete categories[username];
+    }
 
-          window.chrome.storage.local.set(
-            { user_categories: categories },
-            () => {
-              resolve();
-            }
-          );
-        });
-      } else {
-        resolve();
-      }
-    });
+    await safeStorageSet("local", { user_categories: categories });
   }
 
   async function verifySubscriptionStatus(token) {
@@ -418,15 +497,28 @@
               headers: { Authorization: `Bearer ${refreshed}` },
             });
             if (retryRes.ok) {
-              const data = await retryRes.json();
-              return data.email_verified !== false;
+              const retryContentType = retryRes.headers.get("content-type");
+              if (
+                retryContentType &&
+                retryContentType.includes("application/json")
+              ) {
+                const data = await retryRes.json();
+                return data.email_verified !== false;
+              }
             }
           }
           // Si le rafraîchissement a échoué, retourner false sans déconnecter
-          console.log(
-            "❌ Impossible de rafraîchir le token - Retour false"
-          );
+          console.log("❌ Impossible de rafraîchir le token - Retour false");
         }
+        return false;
+      }
+
+      // Vérifier que la réponse est bien du JSON
+      const contentType = res.headers.get("content-type");
+      if (!contentType || !contentType.includes("application/json")) {
+        console.warn(
+          `[MYM] Réponse non-JSON reçue (${contentType}), probablement une erreur serveur`
+        );
         return false;
       }
 
@@ -1485,12 +1577,10 @@
           totalSpentFetched.add(username);
           const info = await fetchUserDetailedInfo(username);
 
-          if (info.totalSpent > 0) {
+          if (info) {
             addTotalSpentBadge(link, info.totalSpent, username);
           }
-        } catch (err) {
-          console.error("[MYM] Error processing row:", err);
-        }
+        } catch (err) {}
       }
 
       // Also look for .user-card (followers page)
@@ -1509,17 +1599,102 @@
           totalSpentFetched.add(username);
           const info = await fetchUserDetailedInfo(username);
 
-          if (info.totalSpent > 0) {
+          if (info) {
             addTotalSpentBadgeToCard(card, info.totalSpent, username);
           }
-        } catch (err) {
-          console.error("[MYM] Error processing user card:", err);
-        }
+        } catch (err) {}
       }
     }
   }
 
-  function injectMessageHtml(htmlString) {
+  // Injecter les styles CSS de l'extension
+  function injectStyles() {
+    if (document.getElementById("mym-live-style")) {
+      console.log("🎨 [CONTENT.JS] Styles déjà injectés");
+      return; // Déjà injecté
+    }
+
+    console.log("🎨 [CONTENT.JS] Injection des styles CSS...");
+    const style = document.createElement("style");
+    style.id = "mym-live-style";
+    style.textContent = `
+      .mym-live-anim{animation: mym-appear 700ms ease both}
+      @keyframes mym-appear{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
+      
+      /* Fix scroll comportment pour discussions */
+      html, body {
+        overflow: hidden !important;
+        height: 100%;
+        margin: 0;
+        padding: 0;
+      }
+      
+      .main.main-discussions {
+        display: flex;
+        flex-direction: column;
+        height: 100vh;
+        overflow: hidden;
+        height: calc(100vh - 100px);
+      }
+      
+      .content-body {
+        display: flex;
+        flex-direction: column;
+        flex: 1;
+        min-height: 0;
+        overflow: hidden;
+      }
+      
+      .discussions {
+        display: flex;
+        flex-direction: column;
+        flex: 1;
+        min-height: 0;
+        max-height: calc(100vh - 173px);
+        overflow: hidden;
+        height: calc(100vh - 173px) !important;
+      }
+      
+      .discussions__chats {
+        flex: 1;
+        overflow-y: auto;
+        overflow-x: hidden;
+        min-height: 0;
+        max-height: 100%;
+      }
+      
+      @media (min-width: 1024px) {
+        .discussions__chats {
+          padding-bottom: 80px !important;
+          height: calc(100% - 120px) !important;
+        }
+        
+        .discussions__chats--creators {
+          height: auto !important;
+          max-height: 100%;
+        }
+      }
+      
+      .discussions__bottom,
+      .discussions__footer {
+        flex-shrink: 0;
+      }
+      
+      /* Fix sticky header */
+      .content-search-bar {
+        position: sticky;
+        top: 0;
+        z-index: 10;
+        background: var(--background-color, #1a1a1a);
+        flex-shrink: 0;
+      }
+    `;
+
+    
+    if (document.head) {
+      document.head.appendChild(style);
+    }
+  }  function injectMessageHtml(htmlString) {
     const container =
       document.querySelector(CONTAINER_SELECTOR) || document.body;
     const wrapper = document.createElement("div");
@@ -1529,15 +1704,8 @@
       try {
         // apply a light animation class and remove it after animation ends
         // ensure the animation style is present
-        if (!document.getElementById("mym-live-style")) {
-          const style = document.createElement("style");
-          style.id = "mym-live-style";
-          style.textContent = `
-            .mym-live-anim{animation: mym-appear 700ms ease both}
-            @keyframes mym-appear{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
-          `;
-          document.head && document.head.appendChild(style);
-        }
+        injectStyles();
+
         node.classList.add("mym-live-anim");
         node.addEventListener(
           "animationend",
@@ -1635,8 +1803,20 @@
       return;
     }
 
+    // Préserver la box de stats avant de nettoyer (déplacer, pas cloner)
+    const userInfoBox = document.getElementById("mym-user-info-box");
+    let preservedBox = null;
+    if (userInfoBox) {
+      preservedBox = userInfoBox.parentNode.removeChild(userInfoBox); // Détacher sans cloner
+    }
+
     // Clear existing content from sidebar__section
     sidebarSection.innerHTML = "";
+
+    // Restaurer la box de stats si elle existait
+    if (preservedBox) {
+      sidebarSection.appendChild(preservedBox);
+    }
 
     // Remove old injected discussions if exists
     const oldWrapper = document.querySelector('[data-mym-wrapper="true"]');
@@ -1644,9 +1824,9 @@
       oldWrapper.remove();
     }
 
-    // 🆕 Injecter la box d'information utilisateur avant la liste
+    // 🆕 Injecter la box d'information utilisateur avant la liste (seulement si elle n'existe pas déjà)
     const currentUsername = getCurrentConversationUsername();
-    if (currentUsername && badgesEnabled) {
+    if (currentUsername && badgesEnabled && !preservedBox) {
       injectUserInfoBox(currentUsername);
     }
 
@@ -1677,6 +1857,7 @@
     sidebarSection.style.cssText =
       "flex: 1; min-height: 0; display: flex; flex-direction: column;";
 
+    // Marquer comme injecté avec succès
     discussionsInjected = true;
 
     // Fetch pending income for each user in the list
@@ -1710,12 +1891,11 @@
         totalSpentFetched.add(username);
         const info = await fetchUserDetailedInfo(username);
 
-        // Add badge only if amount > 0
-        if (info.totalSpent > 0) {
+        // Toujours appeler pour afficher le badge de catégorie même si totalSpent = 0
+        if (info) {
           addTotalSpentBadge(link, info.totalSpent, username);
         }
       } catch (err) {
-        console.error("[MYM] Error processing user:", err);
         // silent fail
       }
     }
@@ -1803,43 +1983,110 @@
   }
 
   async function addTotalSpentBadgeToCard(card, totalSpent, username) {
-    // Check if badge already exists
-    if (card.querySelector(".mym-total-spent-badge")) {
+    // Check if amount badge already exists
+    const existingBadge = card.querySelector(".mym-total-spent-badge");
+    if (existingBadge) {
+      // Badge de montant existe, vérifier si badge de catégorie existe
+      const existingCategoryBadge = card.querySelector(".mym-category-badge");
+      if (existingCategoryBadge) {
+        return; // Les deux badges existent déjà
+      }
+
+      // Ajouter seulement le badge de catégorie
+      const category = await getUserCategory(username);
+      if (category) {
+        const categoryConfig = {
+          TW: { emoji: "⏱️", label: "Time Waster", color: "#ef4444" },
+          SP: { emoji: "💰", label: "Sérieux Payeur", color: "#10b981" },
+          Whale: { emoji: "🐋", label: "Whale", color: "#8b5cf6" },
+        };
+
+        const config = categoryConfig[category];
+        const categoryBadge = document.createElement("div");
+        categoryBadge.className = "mym-category-badge";
+        categoryBadge.style.cssText = `
+          display: inline-block;
+          background: ${config.color};
+          color: white;
+          padding: 4px 8px;
+          border-radius: 12px;
+          font-size: 11px;
+          font-weight: 600;
+          margin-left: 4px;
+          vertical-align: middle;
+        `;
+        categoryBadge.textContent = `${config.emoji} ${category}`;
+        categoryBadge.title = config.label;
+
+        // Insérer après le badge existant
+        existingBadge.parentElement.insertBefore(
+          categoryBadge,
+          existingBadge.nextSibling
+        );
+      }
       return;
     }
 
     // Récupérer la catégorie de l'utilisateur
     const category = await getUserCategory(username);
-    const categoryEmojis = {
-      TW: "⏱️",
-      SP: "💰",
-      Whale: "🐋",
+    const categoryConfig = {
+      TW: { emoji: "⏱️", label: "Time Waster", color: "#ef4444" },
+      SP: { emoji: "💰", label: "Sérieux Payeur", color: "#10b981" },
+      Whale: { emoji: "🐋", label: "Whale", color: "#8b5cf6" },
     };
 
-    const badge = document.createElement("div");
-    badge.className = "mym-total-spent-badge";
-    badge.style.cssText = `
-      display: inline-block;
-      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-      color: white;
-      padding: 4px 8px;
-      border-radius: 12px;
-      font-size: 12px;
-      font-weight: 600;
-      margin-left: 8px;
-      vertical-align: middle;
-    `;
-    badge.textContent = `${
-      category ? categoryEmojis[category] + " " : ""
-    }${totalSpent.toFixed(2)}€`;
-    badge.title = `Revenu total de ${username}: ${totalSpent.toFixed(2)}€`;
+    // Badge de montant (uniquement si totalSpent > 0)
+    let badge = null;
+    if (totalSpent > 0) {
+      badge = document.createElement("div");
+      badge.className = "mym-total-spent-badge";
+      badge.style.cssText = `
+        display: inline-block;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        padding: 4px 8px;
+        border-radius: 12px;
+        font-size: 12px;
+        font-weight: 600;
+        margin-left: 8px;
+        vertical-align: middle;
+      `;
+      badge.textContent = `${totalSpent.toFixed(2)}€`;
+      badge.title = `Revenu total de ${username}: ${totalSpent.toFixed(2)}€`;
+    }
 
-    // Insert badge after the nickname
+    // Badge de catégorie si défini
+    let categoryBadge = null;
+    if (category && categoryConfig[category]) {
+      const config = categoryConfig[category];
+      categoryBadge = document.createElement("div");
+      categoryBadge.className = "mym-category-badge";
+      categoryBadge.style.cssText = `
+        display: inline-block;
+        background: ${config.color};
+        color: white;
+        padding: 4px 8px;
+        border-radius: 12px;
+        font-size: 11px;
+        font-weight: 600;
+        margin-left: 4px;
+        vertical-align: middle;
+      `;
+      categoryBadge.textContent = `${config.emoji} ${category}`;
+      categoryBadge.title = config.label;
+    }
+
+    // Insert badges after the nickname
     const nicknameContainer = card.querySelector(
       ".user-card__nickname-container"
     );
     if (nicknameContainer) {
-      nicknameContainer.appendChild(badge);
+      if (badge) {
+        nicknameContainer.appendChild(badge);
+      }
+      if (categoryBadge) {
+        nicknameContainer.appendChild(categoryBadge);
+      }
     }
   }
 
@@ -1904,10 +2151,14 @@
   }
 
   // 🆕 Récupérer les informations détaillées d'un utilisateur (abonnement, médias, etc.)
-  async function fetchUserDetailedInfo(username, forceRefresh = false, source = 'badge') {
+  async function fetchUserDetailedInfo(
+    username,
+    forceRefresh = false,
+    source = "badge"
+  ) {
     // Utiliser le bon AbortController selon la source
     let controller, currentController;
-    if (source === 'userInfoBox') {
+    if (source === "userInfoBox") {
       currentController = userInfoBoxFetchController;
       // Annuler la requête userInfoBox précédente si elle existe
       if (userInfoBoxFetchController) {
@@ -1921,15 +2172,15 @@
       badgeFetchController = new AbortController();
       controller = badgeFetchController;
     }
-    
+
     const signal = controller.signal;
-    
+
     // Vérifier le cache (sauf si forceRefresh)
     if (!forceRefresh) {
       const cached = userInfoCache.get(username);
       if (cached && Date.now() - cached.timestamp < USER_INFO_CACHE_DURATION) {
         // Nettoyer le controller approprié
-        if (source === 'userInfoBox') {
+        if (source === "userInfoBox") {
           userInfoBoxFetchController = null;
         } else {
           badgeFetchController = null;
@@ -1957,9 +2208,9 @@
       const url = `${
         location.origin
       }/app/income-details?search=${encodeURIComponent(username)}`;
-      const response = await fetch(url, { 
+      const response = await fetch(url, {
         credentials: "include",
-        signal: signal
+        signal: signal,
       });
 
       if (!response.ok) {
@@ -1967,7 +2218,7 @@
         //   response.status
         // );
         // Nettoyer le bon controller
-        if (source === 'userInfoBox') {
+        if (source === "userInfoBox") {
           userInfoBoxFetchController = null;
         } else {
           badgeFetchController = null;
@@ -1982,13 +2233,12 @@
       // Parcourir toutes les pages pour récupérer les informations
       let currentPage = 1;
       let hasMorePages = true;
-      const maxPages = 10; // Limite de sécurité (optimisé pour performance)
 
-      while (hasMorePages && currentPage <= maxPages) {
+      while (hasMorePages && currentPage <= MAX_PAGES_FETCH) {
         const pageUrl = currentPage === 1 ? url : `${url}&page=${currentPage}`;
-        const pageResponse = await fetch(pageUrl, { 
+        const pageResponse = await fetch(pageUrl, {
           credentials: "include",
-          signal: signal
+          signal: signal,
         });
 
         if (!pageResponse.ok) break;
@@ -2111,22 +2361,22 @@
       });
 
       // Nettoyer le bon controller
-      if (source === 'userInfoBox') {
+      if (source === "userInfoBox") {
         userInfoBoxFetchController = null;
       } else {
         badgeFetchController = null;
       }
-      
+
       return info;
     } catch (err) {
       // Nettoyer le bon controller
-      if (source === 'userInfoBox') {
+      if (source === "userInfoBox") {
         userInfoBoxFetchController = null;
       } else {
         badgeFetchController = null;
       }
-      
-      if (err.name === 'AbortError') {
+
+      if (err.name === "AbortError") {
         return null;
       }
       return info;
@@ -2160,7 +2410,12 @@
 
     isUpdatingUserInfoBox = true;
     currentUserInfoBoxUsername = username;
-    console.log('[MYM] 🔒 Flags set - isUpdatingUserInfoBox:', isUpdatingUserInfoBox, 'currentUserInfoBoxUsername:', currentUserInfoBoxUsername);
+    console.log(
+      "[MYM] 🔒 Flags set - isUpdatingUserInfoBox:",
+      isUpdatingUserInfoBox,
+      "currentUserInfoBoxUsername:",
+      currentUserInfoBoxUsername
+    );
 
     try {
       // Vérifier si la box existe déjà
@@ -2178,7 +2433,7 @@
           color: white;
           box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
         `;
-        
+
         // Insérer la box dans le sidebar
         const sidebarSection = document.querySelector(".sidebar__section");
         if (sidebarSection) {
@@ -2199,14 +2454,13 @@
       `;
 
       // Récupérer les informations
-      const info = await fetchUserDetailedInfo(username, false, 'userInfoBox');
-
+      const info = await fetchUserDetailedInfo(username, false, "userInfoBox");
       // Vérifier que c'est toujours le bon utilisateur (éviter les race conditions)
       if (currentUserInfoBoxUsername !== username) {
         isUpdatingUserInfoBox = false;
         return;
       }
-      
+
       // Vérifier que info n'est pas null (peut être null si fetch avorté)
       if (!info) {
         // Réinitialiser les flags pour permettre un nouveau chargement
@@ -2220,28 +2474,28 @@
       // Récupérer la catégorie actuelle de l'utilisateur
       const userCategory = await getUserCategory(username);
 
-    // Déterminer le type d'abonnement
-    let subscriptionBadge = "";
-    if (info.subscriptionRenewal > 0) {
-      // A des renouvellements = abonné payant récurrent
-      subscriptionBadge =
-        '<span style="background: rgba(34, 197, 94, 0.3); padding: 2px 8px; border-radius: 12px; font-size: 11px; font-weight: 600;">🔄 RENOUVELÉ</span>';
-    } else if (info.subscription > 0) {
-      // A un abonnement mais pas de renouvellement = abonné payant initial
-      subscriptionBadge =
-        '<span style="background: rgba(59, 130, 246, 0.3); padding: 2px 8px; border-radius: 12px; font-size: 11px; font-weight: 600;">💰 PAYANT</span>';
-    } else if (info.isSubscribed) {
-      // Abonné mais pas de transaction = abonnement gratuit
-      subscriptionBadge =
-        '<span style="background: rgba(251, 191, 36, 0.3); padding: 2px 8px; border-radius: 12px; font-size: 11px; font-weight: 600;">🎁 GRATUIT</span>';
-    } else {
-      // Non abonné
-      subscriptionBadge =
-        '<span style="background: rgba(255,255,255,0.1); padding: 2px 8px; border-radius: 12px; font-size: 11px; font-weight: 600;">○ NON ABONNÉ</span>';
-    }
+      // Déterminer le type d'abonnement
+      let subscriptionBadge = "";
+      if (info.subscriptionRenewal > 0) {
+        // A des renouvellements = abonné payant récurrent
+        subscriptionBadge =
+          '<span style="background: rgba(34, 197, 94, 0.3); padding: 2px 8px; border-radius: 12px; font-size: 11px; font-weight: 600;">🔄 RENOUVELÉ</span>';
+      } else if (info.subscription > 0) {
+        // A un abonnement mais pas de renouvellement = abonné payant initial
+        subscriptionBadge =
+          '<span style="background: rgba(59, 130, 246, 0.3); padding: 2px 8px; border-radius: 12px; font-size: 11px; font-weight: 600;">💰 PAYANT</span>';
+      } else if (info.isSubscribed) {
+        // Abonné mais pas de transaction = abonnement gratuit
+        subscriptionBadge =
+          '<span style="background: rgba(251, 191, 36, 0.3); padding: 2px 8px; border-radius: 12px; font-size: 11px; font-weight: 600;">🎁 GRATUIT</span>';
+      } else {
+        // Non abonné
+        subscriptionBadge =
+          '<span style="background: rgba(255,255,255,0.1); padding: 2px 8px; border-radius: 12px; font-size: 11px; font-weight: 600;">○ NON ABONNÉ</span>';
+      }
 
-    // Afficher les informations
-    userInfoBox.innerHTML = `
+      // Afficher les informations
+      userInfoBox.innerHTML = `
       <div style="margin-bottom: 8px;">
         <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 3px;">
           <div style="font-size: 14px; font-weight: 700;">
@@ -2397,79 +2651,78 @@
       </div>
     `;
 
-    // Ajouter l'event listener pour le bouton de rafraîchissement
-    const refreshBtn = userInfoBox.querySelector(".mym-refresh-info");
-    if (refreshBtn) {
-      refreshBtn.addEventListener("click", async (e) => {
-        e.preventDefault();
-        refreshBtn.textContent = "⏳";
-        refreshBtn.disabled = true;
-        
-        // Vider le cache pour cet utilisateur
-        userInfoCache.delete(username);
-        
-        // Rafraîchir les informations
-        await injectUserInfoBox(username);
-        
-        setTimeout(() => {
-          refreshBtn.textContent = "🔄";
-          refreshBtn.disabled = false;
-        }, 500);
+      // Ajouter l'event listener pour le bouton de rafraîchissement
+      const refreshBtn = userInfoBox.querySelector(".mym-refresh-info");
+      if (refreshBtn) {
+        refreshBtn.addEventListener("click", async (e) => {
+          e.preventDefault();
+          refreshBtn.textContent = "⏳";
+          refreshBtn.disabled = true;
+
+          // Vider le cache pour cet utilisateur
+          userInfoCache.delete(username);
+
+          // Rafraîchir les informations
+          await injectUserInfoBox(username);
+
+          setTimeout(() => {
+            refreshBtn.textContent = "🔄";
+            refreshBtn.disabled = false;
+          }, 500);
+        });
+
+        refreshBtn.addEventListener("mouseenter", () => {
+          refreshBtn.style.background = "rgba(255, 255, 255, 0.2)";
+        });
+        refreshBtn.addEventListener("mouseleave", () => {
+          refreshBtn.style.background = "rgba(255, 255, 255, 0.1)";
+        });
+      }
+
+      // Ajouter les event listeners pour les boutons de catégorie
+      const categoryButtons = userInfoBox.querySelectorAll(".mym-category-btn");
+      categoryButtons.forEach((btn) => {
+        btn.addEventListener("click", async (e) => {
+          e.preventDefault();
+          const clickedCategory = e.target.getAttribute("data-category");
+
+          // Si c'est déjà la catégorie active, on la désélectionne
+          const newCategory =
+            clickedCategory === userCategory ? "" : clickedCategory;
+
+          // Sauvegarder la catégorie
+          await setUserCategory(username, newCategory);
+
+          // Forcer le rechargement complet de la box
+          const existingBox = document.getElementById("mym-user-info-box");
+          if (existingBox) {
+            existingBox.remove();
+          }
+          await injectUserInfoBox(username);
+        });
       });
-      
-      refreshBtn.addEventListener("mouseenter", () => {
-        refreshBtn.style.background = "rgba(255, 255, 255, 0.2)";
-      });
-      refreshBtn.addEventListener("mouseleave", () => {
-        refreshBtn.style.background = "rgba(255, 255, 255, 0.1)";
-      });
-    }
 
-    // Ajouter les event listeners pour les boutons de catégorie
-    const categoryButtons = userInfoBox.querySelectorAll(".mym-category-btn");
-    categoryButtons.forEach((btn) => {
-      btn.addEventListener("click", async (e) => {
-        e.preventDefault();
-        const clickedCategory = e.target.getAttribute("data-category");
+      // Ajouter l'event listener pour le bouton toggle
+      const toggleBtn = userInfoBox.querySelector("#mym-toggle-details");
+      const detailsContainer = userInfoBox.querySelector(
+        "#mym-details-container"
+      );
 
-        // Si c'est déjà la catégorie active, on la désélectionne
-        const newCategory =
-          clickedCategory === userCategory ? "" : clickedCategory;
+      if (toggleBtn && detailsContainer) {
+        toggleBtn.addEventListener("click", (e) => {
+          e.preventDefault();
+          const isVisible = detailsContainer.style.display !== "none";
 
-        // Sauvegarder la catégorie
-        await setUserCategory(username, newCategory);
-
-        // Forcer le rechargement complet de la box
-        const existingBox = document.getElementById("mym-user-info-box");
-        if (existingBox) {
-          existingBox.remove();
-        }
-        await injectUserInfoBox(username);
-      });
-    });
-
-    // Ajouter l'event listener pour le bouton toggle
-    const toggleBtn = userInfoBox.querySelector("#mym-toggle-details");
-    const detailsContainer = userInfoBox.querySelector(
-      "#mym-details-container"
-    );
-
-    if (toggleBtn && detailsContainer) {
-      toggleBtn.addEventListener("click", (e) => {
-        e.preventDefault();
-        const isVisible = detailsContainer.style.display !== "none";
-
-        if (isVisible) {
-          detailsContainer.style.display = "none";
-          toggleBtn.textContent = "▼";
-        } else {
-          detailsContainer.style.display = "block";
-          toggleBtn.textContent = "▲";
-        }
-      });
-    }
+          if (isVisible) {
+            detailsContainer.style.display = "none";
+            toggleBtn.textContent = "▼";
+          } else {
+            detailsContainer.style.display = "block";
+            toggleBtn.textContent = "▲";
+          }
+        });
+      }
     } catch (error) {
-      console.error("[MYM] Error updating user info box:", error);
       // En cas d'erreur, afficher un message dans la box
       const userInfoBox = document.getElementById("mym-user-info-box");
       if (userInfoBox) {
@@ -2502,16 +2755,62 @@
       return;
     }
 
-    // Check if badge already exists
-    if (row.querySelector(".mym-total-spent-badge")) {
+    // Check if amount badge already exists
+    const existingBadge = row.querySelector(".mym-total-spent-badge");
+    if (existingBadge) {
+      // Badge de montant existe, vérifier si badge de catégorie existe
+      const existingCategoryBadge = row.querySelector(".mym-category-badge");
+      if (existingCategoryBadge) {
+        return; // Les deux badges existent déjà
+      }
+
+      // Ajouter seulement le badge de catégorie
+      const category = await getUserCategory(username);
+      if (category) {
+        const categoryConfig = {
+          TW: { emoji: "⏱️", label: "Time Waster", color: "#ef4444" },
+          SP: { emoji: "💰", label: "Sérieux Payeur", color: "#10b981" },
+          Whale: { emoji: "🐋", label: "Whale", color: "#8b5cf6" },
+        };
+
+        const config = categoryConfig[category];
+        const categoryBadge = document.createElement("span");
+        categoryBadge.className = "mym-category-badge";
+        categoryBadge.textContent = `${config.emoji} ${category}`;
+        categoryBadge.style.cssText = `
+          display: inline-block !important;
+          background: ${config.color} !important;
+          color: white !important;
+          font-size: 10px !important;
+          font-weight: 600 !important;
+          padding: 3px 6px !important;
+          border-radius: 12px !important;
+          margin-left: 4px !important;
+          vertical-align: middle !important;
+          z-index: 9999 !important;
+          white-space: nowrap !important;
+          line-height: 1.2 !important;
+          position: relative !important;
+          opacity: 1 !important;
+          visibility: visible !important;
+        `;
+        categoryBadge.title = config.label;
+
+        // Insérer après le badge de montant existant
+        existingBadge.parentElement.insertBefore(
+          categoryBadge,
+          existingBadge.nextSibling
+        );
+      }
       return;
     }
 
     // Find the nickname container - try multiple selectors
+    const nicknameElement = row.querySelector(".js-nickname-placeholder");
     let nicknameContainer =
       row.querySelector(".nickname_profile") ||
       row.querySelector(".list__row__label") ||
-      row.querySelector(".js-nickname-placeholder")?.parentElement ||
+      (nicknameElement && nicknameElement.parentElement) ||
       row.querySelector("[class*='nickname']") ||
       row.querySelector("[class*='label']");
 
@@ -2527,37 +2826,72 @@
 
     // Récupérer la catégorie de l'utilisateur
     const category = await getUserCategory(username);
-    const categoryEmojis = {
-      TW: "⏱️",
-      SP: "💰",
-      Whale: "🐋",
+    const categoryConfig = {
+      TW: { emoji: "⏱️", label: "Time Waster", color: "#ef4444" },
+      SP: { emoji: "💰", label: "Sérieux Payeur", color: "#10b981" },
+      Whale: { emoji: "🐋", label: "Whale", color: "#8b5cf6" },
     };
 
-    const badge = document.createElement("span");
-    badge.className = "mym-total-spent-badge";
-    badge.textContent = `${
-      category ? categoryEmojis[category] + " " : ""
-    }${amount.toFixed(2)} €`;
-    badge.style.cssText = `
-      display: inline-block !important;
-      background: #10b981 !important;
-      color: white !important;
-      font-size: 11px !important;
-      font-weight: 600 !important;
-      padding: 3px 8px !important;
-      border-radius: 12px !important;
-      margin-left: 8px !important;
-      vertical-align: middle !important;
-      z-index: 9999 !important;
-      white-space: nowrap !important;
-      line-height: 1.2 !important;
-      position: relative !important;
-      opacity: 1 !important;
-      visibility: visible !important;
-    `;
+    // Badge de montant (uniquement si amount > 0)
+    let badge = null;
+    if (amount > 0) {
+      badge = document.createElement("span");
+      badge.className = "mym-total-spent-badge";
+      badge.textContent = `${amount.toFixed(2)} €`;
+      badge.style.cssText = `
+        display: inline-block !important;
+        background: #10b981 !important;
+        color: white !important;
+        font-size: 11px !important;
+        font-weight: 600 !important;
+        padding: 3px 8px !important;
+        border-radius: 12px !important;
+        margin-left: 8px !important;
+        vertical-align: middle !important;
+        z-index: 9999 !important;
+        white-space: nowrap !important;
+        line-height: 1.2 !important;
+        position: relative !important;
+        opacity: 1 !important;
+        visibility: visible !important;
+      `;
+      badge.title = `Total dépensé par ${username}`;
+    }
+
+    // Badge de catégorie si défini
+    let categoryBadge = null;
+    if (category && categoryConfig[category]) {
+      const config = categoryConfig[category];
+      categoryBadge = document.createElement("span");
+      categoryBadge.className = "mym-category-badge";
+      categoryBadge.textContent = `${config.emoji} ${category}`;
+      categoryBadge.style.cssText = `
+        display: inline-block !important;
+        background: ${config.color} !important;
+        color: white !important;
+        font-size: 10px !important;
+        font-weight: 600 !important;
+        padding: 3px 6px !important;
+        border-radius: 12px !important;
+        margin-left: 4px !important;
+        vertical-align: middle !important;
+        z-index: 9999 !important;
+        white-space: nowrap !important;
+        line-height: 1.2 !important;
+        position: relative !important;
+        opacity: 1 !important;
+        visibility: visible !important;
+      `;
+      categoryBadge.title = config.label;
+    }
 
     // Insert badge at the end of the nickname_profile container
-    nicknameContainer.appendChild(badge);
+    if (badge) {
+      nicknameContainer.appendChild(badge);
+    }
+    if (categoryBadge) {
+      nicknameContainer.appendChild(categoryBadge);
+    }
   }
 
   // Process a single row to add badge (used for dynamically added rows)
@@ -2575,12 +2909,9 @@
       totalSpentFetched.add(username);
       const info = await fetchUserDetailedInfo(username);
 
-      if (info.totalSpent > 0) {
-        addTotalSpentBadge(link, info.totalSpent, username);
-      }
-    } catch (err) {
-      console.error("[MYM] Error processing row for badge:", err);
-    }
+      // Toujours appeler la fonction pour afficher le badge de catégorie même si totalSpent = 0
+      addTotalSpentBadge(link, info.totalSpent, username);
+    } catch (err) {}
   }
 
   async function processCardForBadge(card) {
@@ -2597,12 +2928,9 @@
       totalSpentFetched.add(username);
       const info = await fetchUserDetailedInfo(username);
 
-      if (info.totalSpent > 0) {
-        addTotalSpentBadgeToCard(card, info.totalSpent, username);
-      }
-    } catch (err) {
-      console.error("[MYM] Error processing card for badge:", err);
-    }
+      // Toujours appeler la fonction pour afficher le badge de catégorie même si totalSpent = 0
+      addTotalSpentBadgeToCard(card, info.totalSpent, username);
+    } catch (err) {}
   }
 
   // Add badge to chat header in main content area
@@ -2710,7 +3038,6 @@
       }
       if (res.html) handleFetchedHtml(res.html);
     } catch (err) {
-      // silent fail
     } finally {
       pollingInProgress = false;
     }
@@ -2718,10 +3045,13 @@
 
   function startPolling() {
     if (pollHandle) return; // already started
-    
+
     // Vérifier si la page est visible avant de commencer le polling
     if (document.hidden) return;
-    
+
+    // Injecter les styles CSS dès le démarrage
+    injectStyles();
+
     scanExisting();
 
     // Scan existing lists for badges on initial load
@@ -2741,6 +3071,47 @@
     // Add badge to chat header if on chat page
     if (isChatPage && badgesEnabled) {
       addBadgeToChatHeader();
+    }
+
+    // 🔄 Sur Firefox, forcer l'injection des discussions avec retry
+    if (isChatPage && !discussionsInjected) {
+      const tryInject = async (attempt = 1, maxAttempts = 5) => {
+        if (discussionsInjected) {
+          return;
+        }
+
+        // Vérifier si le sidebar existe avant de fetch
+        const sidebar = document.querySelector(".sidebar__section");
+        if (!sidebar) {
+          if (attempt < maxAttempts) {
+            setTimeout(() => tryInject(attempt + 1, maxAttempts), 1000);
+          }
+          return;
+        }
+
+        try {
+          const mymsRes = await fetchMymsPage();
+          if (mymsRes.html) {
+            const parser = new DOMParser();
+            const doc = parser.parseFromString(mymsRes.html, "text/html");
+            injectDiscussionsList(doc);
+
+            if (!discussionsInjected && attempt < maxAttempts) {
+              setTimeout(() => tryInject(attempt + 1, maxAttempts), 1000);
+            }
+          } else {
+            if (attempt < maxAttempts) {
+              setTimeout(() => tryInject(attempt + 1, maxAttempts), 1000);
+            }
+          }
+        } catch (err) {
+          if (attempt < maxAttempts) {
+            setTimeout(() => tryInject(attempt + 1, maxAttempts), 1000);
+          }
+        }
+      };
+
+      tryInject();
     }
 
     pollOnce();
@@ -2860,19 +3231,16 @@
       observer.disconnect();
       observer = null;
     }
-
-    // Remove broadcast buttons when features are disabled
-    removeBroadcastButtons();
   }
-  
+
   // 🧹 Cleanup global: event listeners et observers
   function cleanupAll() {
     // Stop polling
     stopPolling();
-    
+
     // Stop subscription monitoring
     stopSubscriptionMonitoring();
-    
+
     // Disconnect all observers
     if (footerObserver) {
       footerObserver.disconnect();
@@ -2890,7 +3258,7 @@
       urlObserver.disconnect();
       urlObserver = null;
     }
-    
+
     // Remove event listeners
     if (globalClickHandler) {
       document.removeEventListener("click", globalClickHandler);
@@ -2908,7 +3276,7 @@
       }
       messageListener = null;
     }
-    
+
     // Abort any pending fetches
     if (userInfoBoxFetchController) {
       userInfoBoxFetchController.abort();
@@ -2918,7 +3286,7 @@
       badgeFetchController.abort();
       badgeFetchController = null;
     }
-    
+
     // Clear caches
     userInfoCache.clear();
     totalSpentFetched.clear();
@@ -3016,7 +3384,7 @@
     });
   }
 
-  function readEnabledFlag(defaultVal = false) {
+  function readEnabledFlag(defaultVal = true) {
     return new Promise((resolve) => {
       if (
         typeof window.chrome !== "undefined" &&
@@ -3085,7 +3453,7 @@
           // Vider le cache utilisateur lors du changement de token
           userInfoCache.clear();
           totalSpentFetched.clear();
-          
+
           readFeatureFlags().then((flags) => {
             badgesEnabled = flags.badges;
             statsEnabled = flags.stats;
@@ -3369,9 +3737,7 @@
 
       // Update frequent emojis display
       updateFrequentEmojis();
-    } catch (err) {
-      console.error("[MYM] Error tracking emoji usage:", err);
-    }
+    } catch (err) {}
   }
 
   // Update the frequent emojis section
@@ -3424,9 +3790,7 @@
         };
         frequentSection.appendChild(btn);
       });
-    } catch (err) {
-      console.error("[MYM] Error updating frequent emojis:", err);
-    }
+    } catch (err) {}
   }
 
   function setupEmojiButtonsForInputs() {
@@ -3442,7 +3806,11 @@
       if (input.id === "customPrice") return;
 
       // Skip if already has emoji button
-      if (input.parentElement?.querySelector(".mym-emoji-button")) return;
+      if (
+        input.parentElement &&
+        input.parentElement.querySelector(".mym-emoji-button")
+      )
+        return;
 
       // Make parent position relative if it's not already
       const parent = input.parentElement;
@@ -3461,7 +3829,9 @@
         }
       };
 
-      parent?.appendChild(emojiBtn);
+      if (parent) {
+        parent.appendChild(emojiBtn);
+      }
     });
   }
 
@@ -3544,206 +3914,6 @@
     });
   }
 
-  // Broadcast message feature
-  function setupBroadcastButton() {
-    // Vérifier si la fonctionnalité broadcast est activée
-    chrome.storage.local.get(
-      ["mym_broadcast_enabled", "mym_live_enabled"],
-      (items) => {
-        const broadcastEnabled = items.mym_broadcast_enabled;
-        const globalEnabled = items.mym_live_enabled;
-
-        if (!broadcastEnabled || !globalEnabled) {
-          removeBroadcastButtons();
-          return;
-        }
-
-        const chatInputs = document.querySelectorAll(".chat-input--creators");
-
-        chatInputs.forEach((chatInput) => {
-          // Skip if already setup
-          if (chatInput.hasAttribute("data-mym-broadcast-setup")) {
-            return;
-          }
-          chatInput.setAttribute("data-mym-broadcast-setup", "true");
-
-          // Find the send button to clone its style
-          const sendButton = chatInput.querySelector(".chat-input__send");
-          if (!sendButton) {
-            return;
-          }
-
-          // Create broadcast button
-          const broadcastButton = document.createElement("button");
-          broadcastButton.type = "button";
-          broadcastButton.className =
-            "button button--icon button--primary chat-input__broadcast";
-          broadcastButton.title = "Envoyer à tous les contacts";
-          broadcastButton.style.cssText = `
-          margin-left: 8px;
-          background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important;
-        `;
-
-          broadcastButton.innerHTML = `
-          <span class="button__icon" aria-hidden="true">
-            <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <path fill-rule="evenodd" clip-rule="evenodd" d="M10 3C6.13401 3 3 6.13401 3 10C3 13.866 6.13401 17 10 17C13.866 17 17 13.866 17 10C17 6.13401 13.866 3 10 3ZM10 5C7.23858 5 5 7.23858 5 10C5 12.7614 7.23858 15 10 15C12.7614 15 15 12.7614 15 10C15 7.23858 12.7614 5 10 5ZM10 7C8.34315 7 7 8.34315 7 10C7 11.6569 8.34315 13 10 13C11.6569 13 13 11.6569 13 10C13 8.34315 11.6569 7 10 7Z" fill="white"/>
-              <circle cx="10" cy="10" r="1.5" fill="white"/>
-            </svg>
-          </span>
-        `;
-
-          // Add click handler
-          broadcastButton.addEventListener("click", async () => {
-            const textarea = chatInput.querySelector("textarea");
-            if (!textarea) return;
-
-            const message = textarea.value.trim();
-            if (!message) {
-              alert("Veuillez entrer un message à diffuser");
-              return;
-            }
-
-            if (
-              !confirm(
-                `Êtes-vous sûr de vouloir envoyer ce message à tous vos contacts ?\n\n"${message}"`
-              )
-            ) {
-              return;
-            }
-
-            // Disable button during broadcast
-            broadcastButton.disabled = true;
-            broadcastButton.style.opacity = "0.5";
-
-            try {
-              await broadcastMessage(message);
-              textarea.value = "";
-              alert("Message diffusé avec succès à tous vos contacts !");
-            } catch (error) {
-              console.error("Erreur lors de la diffusion:", error);
-              alert("Erreur lors de la diffusion du message");
-            } finally {
-              broadcastButton.disabled = false;
-              broadcastButton.style.opacity = "1";
-            }
-          });
-
-          // Insert button after send button
-          sendButton.parentNode.insertBefore(
-            broadcastButton,
-            sendButton.nextSibling
-          );
-        });
-      }
-    ); // Close chrome.storage.local.get callback
-  }
-
-  // Remove broadcast buttons when features are disabled
-  function removeBroadcastButtons() {
-    const broadcastButtons = document.querySelectorAll(
-      ".chat-input__broadcast"
-    );
-    broadcastButtons.forEach((button) => button.remove());
-
-    // Remove setup markers so buttons can be recreated later if needed
-    const chatInputs = document.querySelectorAll(".chat-input--creators");
-    chatInputs.forEach((chatInput) => {
-      chatInput.removeAttribute("data-mym-broadcast-setup");
-    });
-  }
-
-  async function broadcastMessage(message) {
-    // Get all contact IDs from the discussions list
-    const contactIds = await getAllContactIds();
-
-    if (contactIds.length === 0) {
-      throw new Error("Aucun contact trouvé");
-    }
-
-    let successCount = 0;
-    let failCount = 0;
-
-    // Send message to each contact
-    for (const contactId of contactIds) {
-      try {
-        const response = await fetch(
-          `https://creators.mym.fans/app/ajax/chat/send_message_to_fan/fan/${contactId}`,
-          {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-              message: message,
-              type: "message",
-            }),
-          }
-        );
-
-        if (response.ok) {
-          successCount++;
-        } else {
-          failCount++;
-          console.error(
-            `Échec d'envoi au contact ${contactId}:`,
-            response.status
-          );
-        }
-
-        // Add small delay to avoid rate limiting
-        await new Promise((resolve) => setTimeout(resolve, 500));
-      } catch (error) {
-        failCount++;
-        console.error(`Erreur lors de l'envoi au contact ${contactId}:`, error);
-      }
-    }
-
-    console.log(
-      `Diffusion terminée: ${successCount} réussis, ${failCount} échoués`
-    );
-  }
-
-  async function getAllContactIds() {
-    // Try to get from injected discussions list first
-    const injectedRows = document.querySelectorAll(
-      '[data-mym-injected="true"] .list__row a[href*="/app/chat/"]'
-    );
-
-    if (injectedRows.length > 0) {
-      const ids = Array.from(injectedRows)
-        .map((link) => {
-          const match = link.href.match(/\/app\/chat\/(\d+)/);
-          return match ? match[1] : null;
-        })
-        .filter((id) => id !== null);
-
-      return ids;
-    }
-
-    // Fallback: fetch from /app/myms page
-    try {
-      const response = await fetch("https://creators.mym.fans/app/myms");
-      const html = await response.text();
-      const parser = new DOMParser();
-      const doc = parser.parseFromString(html, "text/html");
-
-      const links = doc.querySelectorAll('a[href*="/app/chat/"]');
-      const ids = Array.from(links)
-        .map((link) => {
-          const match = link.href.match(/\/app\/chat\/(\d+)/);
-          return match ? match[1] : null;
-        })
-        .filter((id) => id !== null);
-
-      // Remove duplicates
-      return [...new Set(ids)];
-    } catch (error) {
-      console.error("Erreur lors de la récupération des contacts:", error);
-      return [];
-    }
-  }
-
   // User Notes Feature
   let currentChatIdForNotes = null;
 
@@ -3752,15 +3922,18 @@
 
     // Vérifier si l'extension est encore valide
     try {
-      if (!chrome.runtime?.id) {
-        alert("⚠️ Extension rechargée. Veuillez rafraîchir la page pour utiliser les notes.");
+      if (!chrome.runtime && chrome.runtime.id) {
+        alert(
+          "⚠️ Extension rechargée. Veuillez rafraîchir la page pour utiliser les notes."
+        );
         return;
       }
       // Test chrome.storage access
       chrome.storage.sync.get(["test"], () => {});
     } catch (error) {
-      console.warn("[MYM] Extension context invalidated:", error);
-      alert("⚠️ Extension rechargée. Veuillez rafraîchir la page pour utiliser les notes.");
+      alert(
+        "⚠️ Extension rechargée. Veuillez rafraîchir la page pour utiliser les notes."
+      );
       return;
     }
 
@@ -3908,26 +4081,23 @@
 
     // Default templates
     const defaultTemplates = [
-      "✅ Validé",
-      "⏰ En attente",
-      "📸 Photos demandées",
-      "💰 Paiement reçu",
-      "📝 À recontacter",
-      "⭐ VIP",
-      "🎁 Offre spéciale envoyée\nMerci pour votre intérêt",
-      "❌ Pas intéressé",
+      "✅ Ok mon chou\nMerci pour ton message, je reviens vers toi rapidement !",
     ];
 
     // Load custom templates from storage
-    if (!chrome.runtime?.id) {
-      console.warn('[MYM] Extension context invalidated, using default templates');
+    if (!chrome.runtime && chrome.runtime.id) {
+      console.warn(
+        "[MYM] Extension context invalidated, using default templates"
+      );
       // Use default templates without storage
       const templates = defaultTemplates;
-      templatesGrid.innerHTML = '';
-      
+      templatesGrid.innerHTML = "";
+
       templates.forEach((template, index) => {
         const btn = document.createElement("button");
-        const label = template.split('\n')[0].substring(0, 20) + (template.length > 20 ? '...' : '');
+        const label =
+          template.split("\n")[0].substring(0, 20) +
+          (template.length > 20 ? "..." : "");
         btn.textContent = label;
         btn.title = template;
         btn.style.cssText = `
@@ -3953,16 +4123,22 @@
           btn.style.transform = "translateY(0)";
         };
         btn.onclick = () => {
-          const chatTextarea = document.querySelector('textarea.input__input--textarea');
+          const chatTextarea = document.querySelector(
+            "textarea.input__input--textarea"
+          );
           if (chatTextarea) {
             const currentText = chatTextarea.value;
-            const newText = currentText ? currentText + '\n' + template : template;
+            const newText = currentText
+              ? currentText + "\n" + template
+              : template;
             chatTextarea.value = newText;
-            const event = new Event('input', { bubbles: true });
+            const event = new Event("input", { bubbles: true });
             chatTextarea.dispatchEvent(event);
             chatTextarea.focus();
           } else {
-            alert('⚠️ Textarea de chat non trouvé. Assurez-vous d\'être dans une conversation.');
+            alert(
+              "⚠️ Textarea de chat non trouvé. Assurez-vous d'être dans une conversation."
+            );
           }
         };
         templatesGrid.appendChild(btn);
@@ -3971,22 +4147,27 @@
     }
 
     try {
-      chrome.storage.sync.get(['mym_note_templates'], (result) => {
+      chrome.storage.sync.get(["mym_note_templates"], (result) => {
         if (chrome.runtime.lastError) {
-          console.warn('[MYM] Error loading templates:', chrome.runtime.lastError);
+          console.warn(
+            "[MYM] Error loading templates:",
+            chrome.runtime.lastError
+          );
           return;
         }
         const templates = result.mym_note_templates || defaultTemplates;
-      
-      templatesGrid.innerHTML = ''; // Clear existing
-      
-      templates.forEach((template, index) => {
-        const btn = document.createElement("button");
-        // Show first line or first 20 chars as button label
-        const label = template.split('\n')[0].substring(0, 20) + (template.length > 20 ? '...' : '');
-        btn.textContent = label;
-        btn.title = template; // Show full template on hover
-        btn.style.cssText = `
+
+        templatesGrid.innerHTML = ""; // Clear existing
+
+        templates.forEach((template, index) => {
+          const btn = document.createElement("button");
+          // Show first line or first 20 chars as button label
+          const label =
+            template.split("\n")[0].substring(0, 20) +
+            (template.length > 20 ? "..." : "");
+          btn.textContent = label;
+          btn.title = template; // Show full template on hover
+          btn.style.cssText = `
           padding: 6px 10px;
           background: rgba(255, 255, 255, 0.15);
           color: white;
@@ -4000,39 +4181,43 @@
           overflow: hidden;
           text-overflow: ellipsis;
         `;
-        btn.onmouseenter = () => {
-          btn.style.background = "rgba(255, 255, 255, 0.25)";
-          btn.style.transform = "translateY(-1px)";
-        };
-        btn.onmouseleave = () => {
-          btn.style.background = "rgba(255, 255, 255, 0.15)";
-          btn.style.transform = "translateY(0)";
-        };
-        btn.onclick = () => {
-          // Trouver le textarea de chat MYM
-          const chatTextarea = document.querySelector('textarea.input__input--textarea');
-          if (chatTextarea) {
-            const currentText = chatTextarea.value;
-            const newText = currentText ? currentText + '\n' + template : template;
-            chatTextarea.value = newText;
-            
-            // Trigger input event pour que MYM détecte le changement
-            const event = new Event('input', { bubbles: true });
-            chatTextarea.dispatchEvent(event);
-            
-            // Focus sur le textarea
-            chatTextarea.focus();
-          } else {
-            alert('⚠️ Textarea de chat non trouvé. Assurez-vous d\'être dans une conversation.');
-          }
-        };
-        
-        templatesGrid.appendChild(btn);
+          btn.onmouseenter = () => {
+            btn.style.background = "rgba(255, 255, 255, 0.25)";
+            btn.style.transform = "translateY(-1px)";
+          };
+          btn.onmouseleave = () => {
+            btn.style.background = "rgba(255, 255, 255, 0.15)";
+            btn.style.transform = "translateY(0)";
+          };
+          btn.onclick = () => {
+            // Trouver le textarea de chat MYM
+            const chatTextarea = document.querySelector(
+              "textarea.input__input--textarea"
+            );
+            if (chatTextarea) {
+              const currentText = chatTextarea.value;
+              const newText = currentText
+                ? currentText + "\n" + template
+                : template;
+              chatTextarea.value = newText;
+
+              // Trigger input event pour que MYM détecte le changement
+              const event = new Event("input", { bubbles: true });
+              chatTextarea.dispatchEvent(event);
+
+              // Focus sur le textarea
+              chatTextarea.focus();
+            } else {
+              alert(
+                "⚠️ Textarea de chat non trouvé. Assurez-vous d'être dans une conversation."
+              );
+            }
+          };
+
+          templatesGrid.appendChild(btn);
+        });
       });
-    });
-    } catch (error) {
-      console.error('[MYM] Error loading templates from storage:', error);
-    }
+    } catch (error) {}
 
     const manageTemplatesBtn = document.createElement("button");
     manageTemplatesBtn.textContent = "⚙️ Gérer les templates";
@@ -4133,8 +4318,7 @@
     if (!key) return;
 
     // Vérifier si l'extension est encore valide avant d'accéder au storage
-    if (!chrome.runtime?.id) {
-      console.warn("[MYM] Extension context invalidated, cannot load notes");
+    if (!chrome.runtime && chrome.runtime.id) {
       const textarea = document.getElementById("mym-notes-textarea");
       if (textarea) {
         textarea.placeholder = "⚠️ Extension rechargée. Rafraîchissez la page.";
@@ -4147,7 +4331,6 @@
     try {
       chrome.storage.sync.get([key], (result) => {
         if (chrome.runtime.lastError) {
-          console.error("[MYM] Error loading notes:", chrome.runtime.lastError);
           const textarea = document.getElementById("mym-notes-textarea");
           if (textarea) {
             textarea.placeholder =
@@ -4213,7 +4396,8 @@
     `;
 
     const description = document.createElement("p");
-    description.textContent = "Ajoutez ou modifiez vos templates ci-dessous. Utilisez le bouton + pour ajouter un nouveau template.";
+    description.textContent =
+      "Ajoutez ou modifiez vos templates ci-dessous. Utilisez le bouton + pour ajouter un nouveau template.";
     description.style.cssText = `
       margin: 0 0 12px 0;
       font-size: 13px;
@@ -4241,10 +4425,12 @@
       transition: all 0.2s;
       margin-bottom: 12px;
     `;
-    addTemplateBtn.onmouseenter = () => addTemplateBtn.style.background = "rgba(255, 255, 255, 0.3)";
-    addTemplateBtn.onmouseleave = () => addTemplateBtn.style.background = "rgba(255, 255, 255, 0.2)";
+    addTemplateBtn.onmouseenter = () =>
+      (addTemplateBtn.style.background = "rgba(255, 255, 255, 0.3)");
+    addTemplateBtn.onmouseleave = () =>
+      (addTemplateBtn.style.background = "rgba(255, 255, 255, 0.2)");
 
-    function createTemplateInput(text = '', index = 0) {
+    function createTemplateInput(text = "", index = 0) {
       const templateItem = document.createElement("div");
       templateItem.style.cssText = `
         margin-bottom: 12px;
@@ -4256,7 +4442,8 @@
 
       const templateTextarea = document.createElement("textarea");
       templateTextarea.value = text;
-      templateTextarea.placeholder = "Entrez votre template (multi-lignes autorisées)";
+      templateTextarea.placeholder =
+        "Entrez votre template (multi-lignes autorisées)";
       templateTextarea.style.cssText = `
         width: 100%;
         min-height: 60px;
@@ -4285,28 +4472,32 @@
         cursor: pointer;
         transition: all 0.2s;
       `;
-      deleteBtn.onmouseenter = () => deleteBtn.style.background = "rgba(220, 38, 38, 1)";
-      deleteBtn.onmouseleave = () => deleteBtn.style.background = "rgba(220, 38, 38, 0.8)";
+      deleteBtn.onmouseenter = () =>
+        (deleteBtn.style.background = "rgba(220, 38, 38, 1)");
+      deleteBtn.onmouseleave = () =>
+        (deleteBtn.style.background = "rgba(220, 38, 38, 0.8)");
       deleteBtn.onclick = () => templateItem.remove();
 
       templateItem.appendChild(templateTextarea);
       templateItem.appendChild(deleteBtn);
-      
+
       return templateItem;
     }
 
     // Load current templates
-    if (!chrome.runtime?.id) {
-      console.warn('[MYM] Extension context invalidated in template manager');
-      alert('⚠️ Extension rechargée. Veuillez rafraîchir la page.');
+    if (!chrome.runtime && chrome.runtime.id) {
+      alert("⚠️ Extension rechargée. Veuillez rafraîchir la page.");
       modal.remove();
       return;
     }
 
     try {
-      chrome.storage.sync.get(['mym_note_templates'], (result) => {
+      chrome.storage.sync.get(["mym_note_templates"], (result) => {
         if (chrome.runtime.lastError) {
-          console.warn('[MYM] Error loading templates:', chrome.runtime.lastError);
+          console.warn(
+            "[MYM] Error loading templates:",
+            chrome.runtime.lastError
+          );
           return;
         }
         const defaultTemplates = [
@@ -4320,19 +4511,22 @@
           "❌ Pas intéressé",
         ];
         const templates = result.mym_note_templates || defaultTemplates;
-        
+
         templates.forEach((template, index) => {
-          templatesListContainer.appendChild(createTemplateInput(template, index));
+          templatesListContainer.appendChild(
+            createTemplateInput(template, index)
+          );
         });
       });
-    } catch (error) {
-      console.error('[MYM] Error in template manager storage access:', error);
-    }
+    } catch (error) {}
 
     addTemplateBtn.onclick = () => {
-      const newInput = createTemplateInput('', templatesListContainer.children.length);
+      const newInput = createTemplateInput(
+        "",
+        templatesListContainer.children.length
+      );
       templatesListContainer.appendChild(newInput);
-      newInput.querySelector('textarea').focus();
+      newInput.querySelector("textarea").focus();
     };
 
     const buttonsContainer = document.createElement("div");
@@ -4356,46 +4550,57 @@
       cursor: pointer;
       transition: all 0.2s;
     `;
-    saveBtn.onmouseenter = () => saveBtn.style.background = "rgba(255, 255, 255, 0.3)";
-    saveBtn.onmouseleave = () => saveBtn.style.background = "rgba(255, 255, 255, 0.2)";
+    saveBtn.onmouseenter = () =>
+      (saveBtn.style.background = "rgba(255, 255, 255, 0.3)");
+    saveBtn.onmouseleave = () =>
+      (saveBtn.style.background = "rgba(255, 255, 255, 0.2)");
     saveBtn.onclick = () => {
-      if (!chrome.runtime?.id) {
-        alert('⚠️ Extension rechargée. Veuillez rafraîchir la page.');
+      if (!chrome.runtime && chrome.runtime.id) {
+        alert("⚠️ Extension rechargée. Veuillez rafraîchir la page.");
         return;
       }
 
       // Collect all templates from textareas
-      const templateInputs = templatesListContainer.querySelectorAll('textarea');
+      const templateInputs =
+        templatesListContainer.querySelectorAll("textarea");
       const templates = Array.from(templateInputs)
-        .map(ta => ta.value.trim())
-        .filter(t => t.length > 0);
-      
+        .map((ta) => ta.value.trim())
+        .filter((t) => t.length > 0);
+
       try {
         chrome.storage.sync.set({ mym_note_templates: templates }, () => {
           if (chrome.runtime.lastError) {
-            console.error('[MYM] Error saving templates:', chrome.runtime.lastError);
-            alert('❌ Erreur lors de la sauvegarde des templates');
+            console.error(
+              "[MYM] Error saving templates:",
+              chrome.runtime.lastError
+            );
+            alert("❌ Erreur lors de la sauvegarde des templates");
             return;
           }
 
           // Refresh templates grid
-          chrome.storage.sync.get(['mym_note_templates'], (result) => {
+          chrome.storage.sync.get(["mym_note_templates"], (result) => {
             if (chrome.runtime.lastError) {
-              console.error('[MYM] Error loading templates:', chrome.runtime.lastError);
+              console.error(
+                "[MYM] Error loading templates:",
+                chrome.runtime.lastError
+              );
               return;
             }
             const templates = result.mym_note_templates || [];
-            templatesGrid.innerHTML = '';
-          
-          const noteTextarea = document.getElementById('mym-notes-textarea');
-          
-          templates.forEach((template) => {
-            const btn = document.createElement("button");
-            // Show first line or first 20 chars as button label
-            const label = template.split('\n')[0].substring(0, 20) + (template.length > 20 ? '...' : '');
-            btn.textContent = label;
-            btn.title = template; // Show full template on hover
-            btn.style.cssText = `
+            templatesGrid.innerHTML = "";
+
+            const noteTextarea = document.getElementById("mym-notes-textarea");
+
+            templates.forEach((template) => {
+              const btn = document.createElement("button");
+              // Show first line or first 20 chars as button label
+              const label =
+                template.split("\n")[0].substring(0, 20) +
+                (template.length > 20 ? "..." : "");
+              btn.textContent = label;
+              btn.title = template; // Show full template on hover
+              btn.style.cssText = `
               padding: 6px 10px;
               background: rgba(255, 255, 255, 0.15);
               color: white;
@@ -4409,40 +4614,43 @@
               overflow: hidden;
               text-overflow: ellipsis;
             `;
-            btn.onmouseenter = () => {
-              btn.style.background = "rgba(255, 255, 255, 0.25)";
-              btn.style.transform = "translateY(-1px)";
-            };
-            btn.onmouseleave = () => {
-              btn.style.background = "rgba(255, 255, 255, 0.15)";
-              btn.style.transform = "translateY(0)";
-            };
-            btn.onclick = () => {
-              // Trouver le textarea de chat MYM
-              const chatTextarea = document.querySelector('textarea.input__input--textarea');
-              if (chatTextarea) {
-                const currentText = chatTextarea.value;
-                const newText = currentText ? currentText + '\n' + template : template;
-                chatTextarea.value = newText;
-                
-                // Trigger input event pour que MYM détecte le changement
-                const event = new Event('input', { bubbles: true });
-                chatTextarea.dispatchEvent(event);
-                
-                // Focus sur le textarea
-                chatTextarea.focus();
-              }
-            };
-            
-            templatesGrid.appendChild(btn);
+              btn.onmouseenter = () => {
+                btn.style.background = "rgba(255, 255, 255, 0.25)";
+                btn.style.transform = "translateY(-1px)";
+              };
+              btn.onmouseleave = () => {
+                btn.style.background = "rgba(255, 255, 255, 0.15)";
+                btn.style.transform = "translateY(0)";
+              };
+              btn.onclick = () => {
+                // Trouver le textarea de chat MYM
+                const chatTextarea = document.querySelector(
+                  "textarea.input__input--textarea"
+                );
+                if (chatTextarea) {
+                  const currentText = chatTextarea.value;
+                  const newText = currentText
+                    ? currentText + "\n" + template
+                    : template;
+                  chatTextarea.value = newText;
+
+                  // Trigger input event pour que MYM détecte le changement
+                  const event = new Event("input", { bubbles: true });
+                  chatTextarea.dispatchEvent(event);
+
+                  // Focus sur le textarea
+                  chatTextarea.focus();
+                }
+              };
+
+              templatesGrid.appendChild(btn);
+            });
           });
+
+          modal.remove();
         });
-        
-        modal.remove();
-      });
       } catch (error) {
-        console.error('[MYM] Error saving templates:', error);
-        alert('❌ Erreur lors de la sauvegarde des templates');
+        alert("❌ Erreur lors de la sauvegarde des templates");
       }
     };
 
@@ -4459,8 +4667,10 @@
       cursor: pointer;
       transition: all 0.2s;
     `;
-    cancelBtn.onmouseenter = () => cancelBtn.style.background = "rgba(255, 255, 255, 0.15)";
-    cancelBtn.onmouseleave = () => cancelBtn.style.background = "rgba(255, 255, 255, 0.1)";
+    cancelBtn.onmouseenter = () =>
+      (cancelBtn.style.background = "rgba(255, 255, 255, 0.15)");
+    cancelBtn.onmouseleave = () =>
+      (cancelBtn.style.background = "rgba(255, 255, 255, 0.1)");
     cancelBtn.onclick = () => modal.remove();
 
     buttonsContainer.appendChild(saveBtn);
@@ -4488,8 +4698,7 @@
     if (!textarea) return;
 
     // Vérifier si l'extension est encore valide avant d'accéder au storage
-    if (!chrome.runtime?.id) {
-      console.warn("[MYM] Extension context invalidated, cannot save notes");
+    if (!chrome.runtime && chrome.runtime.id) {
       if (!isAutoSave) {
         alert(
           "❌ Extension rechargée. Veuillez rafraîchir la page pour continuer à utiliser les notes."
@@ -4530,7 +4739,6 @@
         }
       );
     } catch (error) {
-      console.error("[MYM] Extension context invalidated:", error);
       alert(
         "❌ Extension rechargée. Veuillez rafraîchir la page pour continuer à utiliser les notes."
       );
@@ -4629,18 +4837,28 @@
     if (!notesEnabled) return;
     if (document.getElementById("mym-notes-button")) return;
 
-    // Find the navigation desktop
-    const nav = document.querySelector(".navigation.navigation--desktop");
-    if (!nav) {
+    // Find the menu wrapper in the chat header (list__row__right__menu-wrapper)
+    const menuWrapper = document.querySelector(
+      ".list__row__right__menu-wrapper"
+    );
+    if (!menuWrapper) {
       setTimeout(createNotesButton, 500);
       return;
     }
 
     const button = document.createElement("button");
     button.id = "mym-notes-button";
-    button.className = "navigation__button button-new button-new--primary";
-    button.textContent = "📝 Notes";
+    button.type = "button";
+    button.className =
+      "button button--icon button--secondary list__row__right__no-border";
     button.title = "Prendre des notes sur cet utilisateur";
+
+    // Créer l'icône du bouton (emoji notes)
+    const icon = document.createElement("span");
+    icon.className = "button__icon";
+    icon.textContent = "📝";
+    icon.style.fontSize = "20px";
+    button.appendChild(icon);
 
     button.onclick = () => {
       const panel = document.getElementById("mym-notes-panel");
@@ -4651,7 +4869,13 @@
       }
     };
 
-    nav.appendChild(button);
+    // Insérer le bouton avant le dropdown-container
+    const dropdownContainer = menuWrapper.querySelector(".dropdown-container");
+    if (dropdownContainer) {
+      menuWrapper.insertBefore(button, dropdownContainer);
+    } else {
+      menuWrapper.appendChild(button);
+    }
   }
 
   // Remove sidebar footer
@@ -4667,20 +4891,21 @@
     // Migrate notes from chrome.storage.local to chrome.storage.sync (one-time migration)
     await migrateNotesToSync();
 
-    const enabled = await readEnabledFlag(false);
-    const flags = await readFeatureFlags();
-    badgesEnabled = flags.badges;
+    const enabled = await readEnabledFlag(true);
+
+    const flags = await readFeatureFlags();    badgesEnabled = flags.badges;
     statsEnabled = flags.stats;
     emojiEnabled = flags.emoji;
     notesEnabled = flags.notes;
 
     watchStorageChanges();
+
     if (enabled) {
       startPolling();
     } else {
       stopPolling();
     }
-    
+
     // 📱 Page Visibility API - Arrêter le polling quand l'onglet est inactif
     document.addEventListener("visibilitychange", () => {
       if (document.hidden) {
@@ -4714,9 +4939,6 @@
     // Setup Ctrl+Enter shortcut for chat inputs
     setupCtrlEnterShortcut();
 
-    // Setup broadcast button for chat inputs
-    setupBroadcastButton();
-
     // Watch for new inputs being added to the page (avec throttling)
     let inputObserverTimeout;
     if (!inputObserver) {
@@ -4725,7 +4947,6 @@
         inputObserverTimeout = setTimeout(() => {
           setupEmojiButtonsForInputs();
           setupCtrlEnterShortcut();
-          setupBroadcastButton();
           inputObserverTimeout = null;
         }, 500); // Throttle à 500ms
       });
@@ -4740,13 +4961,28 @@
       let notesButtonTimeout;
       if (!notesButtonObserver) {
         notesButtonObserver = new MutationObserver(() => {
-          if (notesButtonTimeout) return;
-          notesButtonTimeout = setTimeout(() => {
-            if (!document.getElementById("mym-notes-button") && notesEnabled) {
-              createNotesButton();
+          try {
+            if (notesButtonTimeout) return;
+            notesButtonTimeout = setTimeout(() => {
+              if (
+                !document.getElementById("mym-notes-button") &&
+                notesEnabled
+              ) {
+                createNotesButton();
+              }
+              notesButtonTimeout = null;
+            }, 1000); // Throttle à 1s
+          } catch (err) {
+            if (err.message.includes("Extension context invalidated")) {
+              console.warn(
+                "[MYM] Extension context invalidated, stopping notes button observer"
+              );
+              if (notesButtonObserver) {
+                notesButtonObserver.disconnect();
+                notesButtonObserver = null;
+              }
             }
-            notesButtonTimeout = null;
-          }, 1000); // Throttle à 1s
+          }
         });
         notesButtonObserver.observe(document.body, {
           childList: true,
@@ -4798,7 +5034,9 @@
     if (!messageListener) {
       messageListener = (message, sender, sendResponse) => {
         if (message.action === "featuresEnabled") {
-          console.log("🔓 Message reçu du background: fonctionnalités activées");
+          console.log(
+            "🔓 Message reçu du background: fonctionnalités activées"
+          );
           // Recharger les flags et redémarrer le polling
           readFeatureFlags().then((flags) => {
             badgesEnabled = flags.badges;
@@ -4807,37 +5045,52 @@
             notesEnabled = flags.notes;
             console.log("🔧 Flags rechargés:", flags);
 
-          readEnabledFlag(false).then((enabled) => {
-            if (enabled) {
-              console.log("✅ Redémarrage du polling");
-              startPolling();
-            }
+            readEnabledFlag(false).then((enabled) => {
+              if (enabled) {
+                console.log("✅ Redémarrage du polling");
+                startPolling();
+              }
+            });
           });
-        });
-      }
+        }
 
-      if (message.action === "featuresDisabled") {
-        // Désactiver tous les flags et arrêter le polling
-        badgesEnabled = false;
-        statsEnabled = false;
-        emojiEnabled = false;
-        notesEnabled = false;
-        stopPolling();
+        if (message.action === "featuresDisabled") {
+          // Désactiver tous les flags et arrêter le polling
+          badgesEnabled = false;
+          statsEnabled = false;
+          emojiEnabled = false;
+          notesEnabled = false;
+          stopPolling();
 
-        // Recharger la page pour nettoyer toutes les fonctionnalités injectées
-        setTimeout(() => {
-          window.location.reload();
-        }, 500);
-      }
-    };
-    chrome.runtime.onMessage.addListener(messageListener);
-  }
-  
-  // Cleanup lors du unload de la page
-  window.addEventListener("beforeunload", () => {
-    cleanupAll();
-  });
-  
+          // Recharger la page pour nettoyer toutes les fonctionnalités injectées
+          setTimeout(() => {
+            window.location.reload();
+          }, 500);
+        }
+
+        // 🔄 Rafraîchissement automatique du token Firebase
+        if (message.type === "REFRESH_FIREBASE_TOKEN") {
+          (async () => {
+            const token = await getAccessToken();
+            if (token) {
+              console.log("🔄 Rafraîchissement proactif du token Firebase...");
+              const refreshed = await tryRefreshToken(token);
+              if (refreshed) {
+                console.log("✅ Token Firebase rafraîchi avec succès");
+              } else {
+                console.warn("⚠️ Échec du rafraîchissement du token");
+              }
+            }
+          })();
+        }
+      };
+      chrome.runtime.onMessage.addListener(messageListener);
+    }
+
+    // Cleanup lors du unload de la page
+    window.addEventListener("beforeunload", () => {
+      cleanupAll();
+    });
   })();
 })();
 

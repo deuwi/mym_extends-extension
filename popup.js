@@ -3,7 +3,8 @@
   const API_BASE = window.APP_CONFIG?.API_BASE || "https://mymchat.fr";
   const SIGNIN_URL =
     window.APP_CONFIG?.SIGNIN_URL || "https://mymchat.fr/signin";
-  const TOKEN_MAX_AGE = 30 * 24 * 60 * 60 * 1000; // 30 jours en millisecondes
+  const TOKEN_MAX_AGE =
+    window.APP_CONFIG?.TOKEN_MAX_AGE || 365 * 24 * 60 * 60 * 1000;
 
   console.log(`🔧 Popup loaded with API_BASE: ${API_BASE}`);
 
@@ -89,7 +90,7 @@
         const tokenTime = data.access_token_stored_at || 0;
         const now = Date.now();
         const ageMs = now - tokenTime;
-        const ninetyDays = 90 * 24 * 60 * 60 * 1000;
+        const ninetyDays = 365 * 24 * 60 * 60 * 1000; // 365 jours au lieu de 90
 
         if (!token) {
           // Pas de token - afficher formulaire de connexion
@@ -249,7 +250,12 @@
   async function checkSubscription() {
     return new Promise((resolve) => {
       chrome.storage.local.get(
-        ["firebaseToken", "access_token", "user_email", "access_token_stored_at"],
+        [
+          "firebaseToken",
+          "access_token",
+          "user_email",
+          "access_token_stored_at",
+        ],
         async (data) => {
           const token = data.firebaseToken || data.access_token;
           const email = data.user_email;
@@ -268,10 +274,18 @@
             const tokenAge = Date.now() - tokenStoredAt;
             if (tokenAge > TOKEN_MAX_AGE) {
               console.warn(
-                `⚠️ Token expiré (âge: ${Math.floor(tokenAge / (24 * 60 * 60 * 1000))} jours)`
+                `⚠️ Token expiré (âge: ${Math.floor(
+                  tokenAge / (24 * 60 * 60 * 1000)
+                )} jours)`
               );
               chrome.storage.local.remove(
-                ["access_token", "firebaseToken", "access_token_stored_at", "user_id", "user_email"],
+                [
+                  "access_token",
+                  "firebaseToken",
+                  "access_token_stored_at",
+                  "user_id",
+                  "user_email",
+                ],
                 () => {
                   showStatus(
                     "⚠️ Votre session a expiré. Veuillez vous reconnecter.",
@@ -315,6 +329,18 @@
               return;
             }
 
+            // Vérifier que la réponse est bien du JSON
+            const contentType = res.headers.get("content-type");
+            if (!contentType || !contentType.includes("application/json")) {
+              console.error(
+                `❌ Réponse non-JSON reçue (${contentType}), erreur serveur`
+              );
+              showAuthSection();
+              disableAllToggles();
+              resolve();
+              return;
+            }
+
             const result = await res.json();
             console.log("✅ Abonnement vérifié:", result);
 
@@ -338,6 +364,16 @@
 
   async function verifyToken(token, email) {
     try {
+      // Récupérer l'email depuis le storage si non fourni
+      if (!email) {
+        const storageData = await new Promise((resolve) => {
+          chrome.storage.local.get(["user_email"], (items) => {
+            resolve(items);
+          });
+        });
+        email = storageData.user_email;
+      }
+
       // Vérifier l'âge du token
       const result = await new Promise((resolve) => {
         chrome.storage.local.get(["access_token_stored_at"], (items) => {
@@ -349,7 +385,9 @@
         const tokenAge = Date.now() - result;
         if (tokenAge > TOKEN_MAX_AGE) {
           console.warn(
-            `⚠️ Token expiré (âge: ${Math.floor(tokenAge / (24 * 60 * 60 * 1000))} jours) - déconnexion`
+            `⚠️ Token expiré (âge: ${Math.floor(
+              tokenAge / (24 * 60 * 60 * 1000)
+            )} jours) - déconnexion`
           );
           chrome.storage.local.remove(
             ["access_token", "access_token_stored_at", "user_id", "user_email"],
@@ -399,7 +437,7 @@
           );
           return;
         }
-        
+
         // Erreur API - on affiche quand même l'interface utilisateur
         // Mais on informe que la vérification a échoué
         showUserSection(email, {
@@ -426,11 +464,33 @@
         return;
       }
 
+      // Vérifier que la réponse est bien du JSON
+      const contentType = res.headers.get("content-type");
+      if (!contentType || !contentType.includes("application/json")) {
+        console.error(
+          `❌ Réponse non-JSON reçue (${contentType}), erreur serveur`
+        );
+        showUserSection(email, {
+          subscription_active: false,
+          trial_days_remaining: 0,
+          status: "error",
+        });
+        showStatus("⚠️ Erreur serveur (réponse invalide)", "error");
+        enableAllToggles();
+        return;
+      }
+
       const data = await res.json();
+
+      // Stocker l'email si disponible dans la réponse
+      const userEmail = data.email || email;
+      if (userEmail) {
+        chrome.storage.local.set({ user_email: userEmail });
+      }
 
       // Vérifier d'abord si l'email est vérifié
       if (data.email_verified === false) {
-        showUserSection(email, data);
+        showUserSection(userEmail, data);
         disableAllToggles();
         showStatus(
           "⚠️ Veuillez vérifier votre email pour utiliser l'extension. Consultez votre profil sur le site.",
@@ -444,7 +504,7 @@
         data.trial_days_remaining > 0 ||
         data.agency_license_active
       ) {
-        showUserSection(email, data);
+        showUserSection(userEmail, data);
         enableAllToggles();
         hideStatus();
 
@@ -461,7 +521,7 @@
       } else {
         // Aucun accès actif - afficher l'utilisateur mais désactiver les toggles
         // et proposer de s'abonner ou d'utiliser une licence agence
-        showUserSection(email, data);
+        showUserSection(userEmail, data);
         disableAllToggles();
 
         // Vérifier si l'utilisateur a une licence agence (même révoquée)
@@ -682,6 +742,16 @@
               return;
             }
 
+            // Vérifier que la réponse est bien du JSON
+            const contentType = res.headers.get("content-type");
+            if (!contentType || !contentType.includes("application/json")) {
+              console.warn(
+                `⚠️ Réponse non-JSON dans checkSubscriptionBeforeToggle (${contentType})`
+              );
+              resolve(false);
+              return;
+            }
+
             const result = await res.json();
 
             // Vérifier email et subscription/trial/agency license
@@ -734,6 +804,16 @@
               return;
             }
 
+            // Vérifier que la réponse est bien du JSON
+            const contentType = res.headers.get("content-type");
+            if (!contentType || !contentType.includes("application/json")) {
+              console.warn(
+                `⚠️ Réponse non-JSON dans checkLicense (${contentType})`
+              );
+              resolve(null);
+              return;
+            }
+
             const result = await res.json();
             resolve(result.has_license ? result : null);
           } catch (err) {
@@ -777,6 +857,14 @@
               headers,
               body: JSON.stringify({ license_key: licenseKey }),
             });
+
+            // Vérifier que la réponse est bien du JSON
+            const contentType = res.headers.get("content-type");
+            if (!contentType || !contentType.includes("application/json")) {
+              reject(new Error("Erreur serveur (réponse invalide)"));
+              return;
+            }
+
             const result = await res.json();
 
             if (!res.ok) {

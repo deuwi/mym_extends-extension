@@ -18,6 +18,27 @@ const CONFIG = {
   },
 };
 
+// ⚙️ Paramètres de timing et de cache (en millisecondes)
+const TIMING_CONFIG = {
+  // Durée de vie des tokens
+  TOKEN_MAX_AGE: 365 * 24 * 60 * 60 * 1000, // 365 jours
+
+  // Intervalles de vérification
+  POLL_INTERVAL_MS: 10000, // 10 secondes - polling des nouveaux messages
+  SUBSCRIPTION_CHECK_INTERVAL: 60 * 60 * 1000, // 1 heure - vérification abonnement
+  LICENSE_CHECK_INTERVAL_MIN: 30, // 30 minutes - vérification licence (en minutes)
+  TOKEN_REFRESH_INTERVAL_MIN: 50, // 50 minutes - rafraîchissement token Firebase (en minutes)
+
+  // Cache
+  USER_INFO_CACHE_DURATION: 2 * 60 * 1000, // 2 minutes
+  LRU_CACHE_MAX_SIZE: 100, // Taille maximale du cache LRU
+
+  // Limites de sécurité
+  MAX_PAGES_FETCH: 10, // Limite de pages à récupérer
+  RELOAD_LOOP_THRESHOLD: 3, // Nombre de rechargements avant détection de boucle
+  RELOAD_LOOP_WINDOW: 30000, // 30 secondes - fenêtre pour détection de boucle
+};
+
 // Export de la configuration active
 const activeConfig = CONFIG[ENVIRONMENT];
 
@@ -28,6 +49,7 @@ const APP_CONFIG = {
   API_BASE: activeConfig.API_BASE,
   FRONTEND_URL: activeConfig.FRONTEND_URL,
   SIGNIN_URL: activeConfig.SIGNIN_URL,
+  ...TIMING_CONFIG,
 };
 
 // Export pour window (content scripts) et globalThis (service worker)

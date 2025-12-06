@@ -1,0 +1,19 @@
+# .gitignore pour extension Firefox
+
+# Build artifacts
+build-firefox/
+*.xpi
+mym-chat-live-firefox.zip
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Logs
+*.log

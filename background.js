@@ -1,12 +1,49 @@
 // background.js - Initialize default values on extension install
 
-// Import configuration - service worker can use importScripts
-importScripts("config.js");
+// 🦊 Firefox utilise 'browser' nativement, Chrome utilise 'chrome'
+// On créé un alias unifié
+if (typeof browser !== 'undefined') {
+  // Firefox - utiliser l'API native
+  if (typeof chrome === 'undefined') {
+    globalThis.chrome = browser;
+  }
+}
 
-// Get API_BASE from global APP_CONFIG
-const API_BASE = globalThis.APP_CONFIG?.API_BASE || "https://mymchat.fr";
-const TOKEN_MAX_AGE = 30 * 24 * 60 * 60 * 1000; // 30 jours en millisecondes
-console.log(`🔧 Background loaded with API_BASE: ${API_BASE}`);
+console.log("🚀 [BACKGROUND] Script starting...");
+console.log("🔍 [BACKGROUND] Runtime detected:", typeof browser !== 'undefined' ? 'Firefox (browser API)' : 'Chrome (chrome API)');
+
+// Configuration is loaded via manifest.json scripts array for Firefox compatibility
+try {
+  console.log(
+    "🔍 [BACKGROUND] Checking APP_CONFIG:",
+    typeof globalThis.APP_CONFIG
+  );
+  console.log("🔍 [BACKGROUND] APP_CONFIG value:", globalThis.APP_CONFIG);
+} catch (e) {
+  console.error("❌ [BACKGROUND] Error checking APP_CONFIG:", e);
+}
+
+const API_BASE =
+  (globalThis.APP_CONFIG && globalThis.APP_CONFIG.API_BASE) ||
+  "https://mymchat.fr";
+const TOKEN_MAX_AGE =
+  (globalThis.APP_CONFIG && globalThis.APP_CONFIG.TOKEN_MAX_AGE) ||
+  365 * 24 * 60 * 60 * 1000;
+console.log(`🔧 [BACKGROUND] Loaded with API_BASE: ${API_BASE}`);
+console.log(
+  `🔧 [BACKGROUND] TOKEN_MAX_AGE: ${
+    TOKEN_MAX_AGE / (24 * 60 * 60 * 1000)
+  } jours`
+);
+console.log("✅ [BACKGROUND] Initialization complete");
+
+// 🩺 Heartbeat pour vérifier que le background reste actif sur Firefox
+setInterval(() => {
+  console.log(
+    "💓 [BACKGROUND] Heartbeat - script still running at",
+    new Date().toLocaleTimeString()
+  );
+}, 30000); // Log toutes les 30 secondes
 
 // 🌉 Écouter les messages du auth-bridge (connexion Google depuis le site web)
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
@@ -140,8 +177,12 @@ function startSubscriptionCheck() {
   // Vérifier immédiatement au démarrage
   checkSubscriptionStatus();
 
-  // Puis vérifier toutes les heures
-  setInterval(checkSubscriptionStatus, 60 * 60 * 1000);
+  // Puis vérifier selon l'intervalle configuré
+  const interval =
+    (globalThis.APP_CONFIG &&
+      globalThis.APP_CONFIG.SUBSCRIPTION_CHECK_INTERVAL) ||
+    60 * 60 * 1000;
+  setInterval(checkSubscriptionStatus, interval);
 }
 
 async function checkSubscriptionStatus() {
@@ -154,7 +195,7 @@ async function checkSubscriptionStatus() {
       const tokenTime = data.access_token_stored_at || 0;
       const now = Date.now();
       const ageMs = now - tokenTime;
-      const ninetyDays = 90 * 24 * 60 * 60 * 1000;
+      const ninetyDays = 365 * 24 * 60 * 60 * 1000; // 365 jours au lieu de 90
 
       // Si pas de token ni email, ne rien faire (utilisateur pas connecté)
       if (!token && !email) {
@@ -162,10 +203,10 @@ async function checkSubscriptionStatus() {
         return;
       }
 
-      // Si token trop vieux (90 jours), NE PAS désactiver, juste logger
+      // Si token trop vieux (365 jours), NE PAS désactiver, juste logger
       // L'utilisateur devra se reconnecter mais on ne supprime rien
       if (token && ageMs > ninetyDays) {
-        // console.log("⚠️  Token expiré (>90 jours) - veuillez vous reconnecter");
+        // console.log("⚠️  Token expiré (>365 jours) - veuillez vous reconnecter");
         // Ne pas désactiver les features, juste informer
         return;
       }
@@ -173,7 +214,9 @@ async function checkSubscriptionStatus() {
       // Vérifier le statut avec le backend
       try {
         // Déterminer si on est en mode local
-        const isLocal = globalThis.APP_CONFIG?.ENVIRONMENT === "local";
+        const isLocal =
+          (globalThis.APP_CONFIG && globalThis.APP_CONFIG.ENVIRONMENT) ===
+          "local";
 
         // En mode local, utiliser les headers de dev au lieu du token Firebase
         const headers = isLocal
@@ -204,6 +247,15 @@ async function checkSubscriptionStatus() {
           //   "⚠️ Erreur API - token peut-être invalide, mais on garde la session"
           // );
           // Ne pas désactiver automatiquement en cas d'erreur API
+          return;
+        }
+
+        // Vérifier que la réponse est bien du JSON
+        const contentType = res.headers.get("content-type");
+        if (!contentType || !contentType.includes("application/json")) {
+          console.warn(
+            `⚠️ Réponse non-JSON reçue (${contentType}), probablement une erreur serveur`
+          );
           return;
         }
 
@@ -275,12 +327,18 @@ function disableAllFeatures() {
 // 🔓 Vérifier et activer automatiquement les fonctionnalités si licence agence active
 async function checkAndEnableFeatures() {
   try {
-    const API_BASE = globalThis.APP_CONFIG?.API_BASE || "http://127.0.0.1:8080";
-    const isLocal = globalThis.APP_CONFIG?.ENVIRONMENT === "local";
+    const API_BASE =
+      (globalThis.APP_CONFIG && globalThis.APP_CONFIG.API_BASE) ||
+      "http://127.0.0.1:8080";
+    const isLocal =
+      (globalThis.APP_CONFIG && globalThis.APP_CONFIG.ENVIRONMENT) === "local";
 
     // Récupérer les données d'authentification
     const storageData = await new Promise((resolve) => {
-      chrome.storage.local.get(["firebaseToken", "user_email", "access_token_stored_at"], resolve);
+      chrome.storage.local.get(
+        ["firebaseToken", "user_email", "access_token_stored_at"],
+        resolve
+      );
     });
     const token = storageData.firebaseToken;
     const email = storageData.user_email;
@@ -296,7 +354,9 @@ async function checkAndEnableFeatures() {
       const tokenAge = Date.now() - tokenStoredAt;
       if (tokenAge > TOKEN_MAX_AGE) {
         console.warn(
-          `⚠️ Token expiré (âge: ${Math.floor(tokenAge / (24 * 60 * 60 * 1000))} jours) - nettoyage`
+          `⚠️ Token expiré (âge: ${Math.floor(
+            tokenAge / (24 * 60 * 60 * 1000)
+          )} jours) - nettoyage`
         );
         await chrome.storage.local.remove([
           "firebaseToken",
@@ -305,7 +365,7 @@ async function checkAndEnableFeatures() {
           "user_id",
           "user_email",
         ]);
-        
+
         // Désactiver toutes les fonctionnalités
         const allDisabled = {
           mym_live_enabled: false,
@@ -348,7 +408,7 @@ async function checkAndEnableFeatures() {
       console.warn(
         `⚠️ Réponse HTTP ${res.status} lors de la vérification de la licence`
       );
-      
+
       // Si token expiré (401), déconnecter l'utilisateur
       if (res.status === 401) {
         console.warn("🔒 Token expiré - nettoyage des credentials");
@@ -358,7 +418,7 @@ async function checkAndEnableFeatures() {
           "user_id",
           "user_email",
         ]);
-        
+
         // Désactiver toutes les fonctionnalités
         const allDisabled = {
           mym_live_enabled: false,
@@ -370,6 +430,15 @@ async function checkAndEnableFeatures() {
         };
         await chrome.storage.local.set(allDisabled);
       }
+      return;
+    }
+
+    // Vérifier que la réponse est bien du JSON
+    const contentType = res.headers.get("content-type");
+    if (!contentType || !contentType.includes("application/json")) {
+      console.warn(
+        `⚠️ Réponse non-JSON reçue (${contentType}), probablement une erreur serveur`
+      );
       return;
     }
 
@@ -409,14 +478,20 @@ async function checkAndEnableFeatures() {
       await chrome.storage.local.set(allDisabled);
     }
   } catch (err) {
-    console.error(
-      "❌ Erreur lors de la vérification de la licence agence:",
-      err
-    );
+    // Erreur silencieuse si problème réseau ou backend indisponible
+    // L'extension continue de fonctionner avec les paramètres actuels
+    if (err.message && err.message.includes("Failed to fetch")) {
+      console.log(
+        "ℹ️  Backend temporairement indisponible - conservation des paramètres actuels"
+      );
+    } else {
+      console.error(
+        "❌ Erreur lors de la vérification de la licence agence:",
+        err
+      );
+    }
   }
-}
-
-// Vérifier la licence agence au changement de token/email
+} // Vérifier la licence agence au changement de token/email
 chrome.storage.onChanged.addListener(async (changes, areaName) => {
   if (areaName === "local") {
     if (changes.firebaseToken || changes.user_email) {
@@ -448,17 +523,54 @@ chrome.storage.local.get(["firebaseToken", "user_email"], (data) => {
   }
 });
 
-// Créer une alarme pour vérifier périodiquement la licence (toutes les 1 minute)
+// Créer une alarme pour vérifier périodiquement la licence
+const licenseCheckInterval =
+  (globalThis.APP_CONFIG && globalThis.APP_CONFIG.LICENSE_CHECK_INTERVAL_MIN) ||
+  30;
 chrome.alarms.create("checkLicenseAlarm", {
-  periodInMinutes: 1,
+  periodInMinutes: licenseCheckInterval,
+});
+
+// Créer une alarme pour rafraîchir le token Firebase
+const tokenRefreshInterval =
+  (globalThis.APP_CONFIG && globalThis.APP_CONFIG.TOKEN_REFRESH_INTERVAL_MIN) ||
+  50;
+chrome.alarms.create("refreshTokenAlarm", {
+  periodInMinutes: tokenRefreshInterval,
 });
 
 // Écouter l'alarme
 chrome.alarms.onAlarm.addListener((alarm) => {
   if (alarm.name === "checkLicenseAlarm") {
-    console.log(
-      "⏰ Alarme déclenchée - vérification périodique de la licence..."
-    );
     checkAndEnableFeatures();
+  } else if (alarm.name === "refreshTokenAlarm") {
+    refreshFirebaseToken();
   }
 });
+
+// 🔄 Rafraîchir le token Firebase de manière proactive
+async function refreshFirebaseToken() {
+  try {
+    const data = await new Promise((resolve) => {
+      chrome.storage.local.get(["firebaseToken", "user_email"], resolve);
+    });
+
+    if (!data.firebaseToken || !data.user_email) {
+      console.log("ℹ️ Pas de token Firebase à rafraîchir");
+      return;
+    }
+
+    console.log("🔄 Rafraîchissement automatique du token Firebase...");
+
+    // Envoyer un message aux content scripts pour déclencher le rafraîchissement
+    chrome.tabs.query({ url: "https://creators.mym.fans/*" }, (tabs) => {
+      if (tabs && tabs.length > 0) {
+        chrome.tabs.sendMessage(tabs[0].id, {
+          type: "REFRESH_FIREBASE_TOKEN",
+        });
+      }
+    });
+  } catch (err) {
+    console.error("❌ Erreur lors du rafraîchissement du token:", err);
+  }
+}
