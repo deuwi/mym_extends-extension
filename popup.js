@@ -3,6 +3,8 @@
   const API_BASE = window.APP_CONFIG?.API_BASE || "https://mymchat.fr";
   const SIGNIN_URL =
     window.APP_CONFIG?.SIGNIN_URL || "https://mymchat.fr/signin";
+  const FRONTEND_URL =
+    window.APP_CONFIG?.FRONTEND_URL || "https://mymchat.fr";
   const TOKEN_MAX_AGE =
     window.APP_CONFIG?.TOKEN_MAX_AGE || 365 * 24 * 60 * 60 * 1000;
 
@@ -643,7 +645,8 @@
           showStatus("✅ Connecté avec succès", "success");
           setTimeout(() => {
             hideStatus();
-            loadLoginStatus();
+            // Recharger le statut de connexion
+            checkSubscription();
           }, 1500);
         });
 
@@ -1030,4 +1033,10 @@
       // console.log("🔓 Vérification de la licence au chargement du popup");
     });
   }, 500);
+
+  // Initialiser le lien de tarification avec l'URL du config
+  const pricingLink = document.getElementById("pricingLink");
+  if (pricingLink) {
+    pricingLink.href = `${FRONTEND_URL}/pricing`;
+  }
 })();

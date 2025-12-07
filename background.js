@@ -127,9 +127,22 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   // 🔓 Message pour vérifier la licence agence
   if (message.action === "checkLicense") {
     // console.log("📨 Message reçu: vérification de la licence demandée");
-    checkAndEnableFeatures().then(() => {
-      sendResponse({ success: true });
+    
+    // ⚠️ Vérifier IMMÉDIATEMENT l'abonnement avant d'activer les features
+    checkSubscriptionStatusSync().then((isValid) => {
+      if (!isValid) {
+        console.warn("⚠️ Abonnement inactif - accès refusé aux fonctionnalités");
+        // Ne pas désactiver complètement, juste refuser l'activation des features
+        sendResponse({ success: false, reason: "subscription_inactive" });
+        return;
+      }
+      
+      // Si l'abonnement est valide, procéder avec l'activation des features
+      checkAndEnableFeatures().then(() => {
+        sendResponse({ success: true });
+      });
     });
+    
     return true; // Indique qu'on va répondre de manière asynchrone
   }
 
@@ -137,32 +150,28 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.type === "FIREBASE_TOKEN" && message.token) {
     // console.log("✅ Background: Received Firebase token from web");
 
-    // Stocker le token + email + user_id + timestamp ET activer toutes les features
+    // Stocker le token + email + user_id + timestamp
+    // SANS activer automatiquement les features (il faut vérifier l'abonnement d'abord)
     chrome.storage.local.set(
       {
         firebaseToken: message.token,
         user_email: message.user_email || "",
         user_id: message.user_id || "",
         access_token_stored_at: Date.now(), // Important: stocker la date pour vérifier l'expiration
-        // Activer toutes les fonctionnalités par défaut
-        mym_live_enabled: true,
-        mym_badges_enabled: true,
-        mym_stats_enabled: true,
-        mym_emoji_enabled: true,
-        mym_notes_enabled: true,
-        mym_broadcast_enabled: true,
       },
       () => {
         console.log(
-          "✅ Background: Firebase token stored and features enabled"
+          "✅ Background: Firebase token stored (features activation pending subscription check)"
         );
 
-        // Vérifier immédiatement le statut d'abonnement et la licence
-        checkSubscriptionStatus();
-        checkAndEnableFeatures();
-
-        // 🎨 Mettre à jour l'icône après connexion
+        // 🎨 Mettre à jour l'icône après connexion (même sans abonnement)
         updateExtensionIcon("connected");
+
+        // Vérifier le statut d'abonnement et activer les features SI valide
+        checkSubscriptionStatus().then(() => {
+          // Si l'abonnement est valide, les features seront activées automatiquement
+          // Sinon, l'utilisateur restera connecté mais sans accès aux features
+        });
 
         // Envoyer une réponse au content script
         sendResponse({ success: true });
@@ -316,17 +325,27 @@ async function checkSubscriptionStatus() {
           headers,
         });
 
-        // console.log(
-        //   "📡 Réponse API /check-subscription:",
-        //   res.status,
-        //   res.statusText
-        // );
+        console.log(
+          "📡 Réponse API /check-subscription:",
+          res.status,
+          res.statusText
+        );
 
         if (!res.ok) {
-          // console.log(
-          //   "⚠️ Erreur API - token peut-être invalide, mais on garde la session"
-          // );
-          // Ne pas désactiver automatiquement en cas d'erreur API
+          if (res.status === 401) {
+            console.log("⚠️ Réponse HTTP 401 - Token invalide ou expiré");
+            console.log("🔒 Nettoyage des credentials et déconnexion complète");
+            disableAllFeatures();
+            chrome.storage.local.remove([
+              "access_token",
+              "access_token_stored_at",
+              "user_email",
+              "firebaseToken",
+              "user_id",
+            ]);
+            updateExtensionIcon("disconnected");
+          }
+          // Pour les autres erreurs (500, 503, etc.), on garde la session
           return;
         }
 
@@ -361,24 +380,23 @@ async function checkSubscriptionStatus() {
 
         // Vérifier si l'abonnement est actif OU période d'essai valide
         if (result.subscription_active || result.trial_days_remaining > 0) {
-          // // console.log("✅ Accès actif :", {
-          //   subscription: result.subscription_active,
-          //   trial: result.trial_days_remaining,
-          // });
-          // Tout est OK, ne rien faire
+          console.log("✅ Abonnement actif - activation des fonctionnalités");
+          // Activer toutes les fonctionnalités
+          chrome.storage.local.set({
+            mym_live_enabled: true,
+            mym_badges_enabled: true,
+            mym_stats_enabled: true,
+            mym_emoji_enabled: true,
+            mym_notes_enabled: true,
+            mym_broadcast_enabled: true,
+          });
         } else {
-          // SEULEMENT si l'abonnement est vraiment expiré (pas le token)
-          // // console.log("⚠️  Abonnement expiré - désactivation des features");
+          // Abonnement expiré : GARDER la connexion mais DÉSACTIVER les features
+          console.log("⚠️ Abonnement expiré - désactivation des fonctionnalités (utilisateur reste connecté)");
           disableAllFeatures();
-
-          // Supprimer le token car l'abonnement est expiré
-          chrome.storage.local.remove([
-            "access_token",
-            "access_token_stored_at",
-            "user_email",
-          ]);
-
-          // // console.log("⚠️ Abonnement expiré - token supprimé");
+          
+          // ⚠️ NE PAS supprimer les credentials - l'utilisateur reste connecté
+          // Il pourra voir son statut dans la popup et renouveler son abonnement
         }
       } catch (err) {
         console.error("❌ Erreur vérification statut:", err);
@@ -387,6 +405,85 @@ async function checkSubscriptionStatus() {
     } // Fin du callback async chrome.storage.local.get
   ); // Fin de chrome.storage.local.get
 } // Fin de checkSubscriptionStatus
+
+// Version synchrone pour vérification immédiate (retourne une Promise)
+async function checkSubscriptionStatusSync() {
+  return new Promise((resolve) => {
+    chrome.storage.local.get(
+      ["access_token", "firebaseToken", "user_email"],
+      async (data) => {
+        const token = data.firebaseToken || data.access_token;
+        const email = data.user_email;
+
+        if (!token && !email) {
+          resolve(false);
+          return;
+        }
+
+        try {
+          const isLocal =
+            (globalThis.APP_CONFIG && globalThis.APP_CONFIG.ENVIRONMENT) ===
+            "local";
+
+          const headers = isLocal
+            ? {
+                "X-Dev-User-Email": email || "dev@test.com",
+                "X-Dev-User-ID": "dev-user",
+              }
+            : { Authorization: `Bearer ${token}` };
+
+          const res = await fetch(API_BASE + "/check-subscription", {
+            headers,
+          });
+
+          if (!res.ok) {
+            console.log("⚠️ Sync check failed:", res.status);
+            if (res.status === 401) {
+              // Token invalide : déconnexion complète
+              disableAllFeatures();
+              chrome.storage.local.remove([
+                "access_token",
+                "access_token_stored_at",
+                "user_email",
+                "firebaseToken",
+                "user_id",
+              ]);
+              updateExtensionIcon("disconnected");
+            }
+            resolve(false);
+            return;
+          }
+
+          const contentType = res.headers.get("content-type");
+          if (!contentType || !contentType.includes("application/json")) {
+            resolve(false);
+            return;
+          }
+
+          const result = await res.json();
+
+          if (result.email_verified === false) {
+            disableAllFeatures();
+            resolve(false);
+            return;
+          }
+
+          if (result.subscription_active || result.trial_days_remaining > 0) {
+            resolve(true);
+          } else {
+            // Abonnement expiré : désactiver les features mais GARDER la connexion
+            disableAllFeatures();
+            // ⚠️ NE PAS supprimer les credentials - l'utilisateur reste connecté
+            resolve(false);
+          }
+        } catch (err) {
+          console.error("❌ Erreur vérification statut sync:", err);
+          resolve(false);
+        }
+      }
+    );
+  });
+}
 
 function disableAllFeatures() {
   chrome.storage.local.set(
@@ -399,8 +496,15 @@ function disableAllFeatures() {
       mym_broadcast_enabled: false,
     },
     () => {
-      // // console.log("🚫 Toutes les fonctionnalités désactivées");
+      console.log("🚫 Toutes les fonctionnalités désactivées");
       updateExtensionIcon("disconnected");
+      
+      // 🔄 Recharger tous les onglets MYM pour appliquer immédiatement la désactivation
+      chrome.tabs.query({ url: "*://*.mym.fans/*" }, (tabs) => {
+        tabs.forEach((tab) => {
+          chrome.tabs.reload(tab.id);
+        });
+      });
     }
   );
 }
@@ -578,16 +682,16 @@ async function checkAndEnableFeatures() {
     }
   }
 } // Vérifier la licence agence au changement de token/email
-chrome.storage.onChanged.addListener(async (changes, areaName) => {
-  if (areaName === "local") {
-    if (changes.firebaseToken || changes.user_email) {
-      console.log(
-        "🔄 Token/email modifié - vérification de la licence agence..."
-      );
-      await checkAndEnableFeatures();
-    }
-  }
-});
+// ⚠️ DÉSACTIVÉ : Le storage listener créait une boucle infinie
+// La vérification périodique via startSubscriptionCheck() suffit
+// chrome.storage.onChanged.addListener(async (changes, areaName) => {
+//   if (areaName === "local") {
+//     const credentialChanged = changes.firebaseToken || changes.user_email;
+//     if (credentialChanged) {
+//       await checkAndEnableFeatures();
+//     }
+//   }
+// });
 
 // Lancer les vérifications au démarrage de l'extension
 startSubscriptionCheck();

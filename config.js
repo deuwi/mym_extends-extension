@@ -25,8 +25,8 @@ const TIMING_CONFIG = {
 
   // Intervalles de vérification
   POLL_INTERVAL_MS: 10000, // 10 secondes - polling des nouveaux messages
-  SUBSCRIPTION_CHECK_INTERVAL: 60 * 60 * 1000, // 1 heure - vérification abonnement
-  LICENSE_CHECK_INTERVAL_MIN: 30, // 30 minutes - vérification licence (en minutes)
+  SUBSCRIPTION_CHECK_INTERVAL: 5 * 60 * 1000, // 5 minutes - vérification abonnement (réduit pour détecter rapidement les annulations)
+  LICENSE_CHECK_INTERVAL_MIN: 5, // 5 minutes - vérification licence (réduit pour meilleure réactivité)
   TOKEN_REFRESH_INTERVAL_MIN: 50, // 50 minutes - rafraîchissement token Firebase (en minutes)
 
   // Cache

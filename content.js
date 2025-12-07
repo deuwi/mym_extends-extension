@@ -78,15 +78,14 @@
         overflow-x: hidden !important;
       }
       
-      /* Make entire list row clickable and hide arrow */
-      .list__row {
-        cursor: pointer !important;
-        transition: all 0.2s ease !important;
+      /* Désactivation du hover sur list__row UNIQUEMENT dans le main (pas dans la sidebar) */
+      .main .list__row {
+        cursor: default !important;
       }
       
-      .list__row:hover {
-        background-color: rgba(102, 126, 234, 0.08) !important;
-        transform: translateX(4px) !important;
+      /* Les lignes dans la sidebar restent cliquables */
+      aside.sidebar .list__row {
+        cursor: pointer !important;
       }
       
       .list__row .link--icon-after svg {
@@ -398,57 +397,14 @@
   // MAKE LIST ROWS CLICKABLE
   // ========================================
   function makeRowClickable(row) {
-    if (row.dataset.mymClickable) return; // Already processed
-
-    // Try multiple selectors to find the chat link
-    const link =
-      row.querySelector("a.link[data-wide][data-id]") ||
-      row.querySelector('a[href*="/app/chat/"]') ||
-      row.querySelector(".list__row__right a");
-
-    if (!link) {
-      console.log("🖱️ [MYM] No link found in row:", row);
-      return;
-    }
-
-    row.dataset.mymClickable = "true";
-
-    // Use capture phase and stop propagation to ensure our handler runs first
-    row.addEventListener(
-      "click",
-      function (e) {
-        console.log("🖱️ [MYM] Row clicked, target:", e.target);
-
-        // Don't trigger if clicking on a button or link directly
-        if (e.target.closest("button")) {
-          console.log("🖱️ [MYM] Clicked on button, ignoring");
-          return;
-        }
-
-        if (e.target.closest("a")) {
-          console.log("🖱️ [MYM] Clicked on link, ignoring");
-          return;
-        }
-
-        // Get the link URL and navigate
-        const url = link.getAttribute("href");
-        if (url) {
-          console.log("🖱️ [MYM] Navigating to:", url);
-          e.preventDefault();
-          e.stopPropagation();
-          window.location.href = url;
-        } else {
-          console.log("🖱️ [MYM] No href found on link");
-        }
-      },
-      true
-    ); // Use capture phase
+    // Désactivé : la ligne entière (content-search-bar et list__row) ne doit plus être cliquable
+    // pour éviter les redirections non désirées vers la même page
+    return;
   }
 
   function makeListRowsClickable() {
-    const rows = document.querySelectorAll(".list__row");
-    rows.forEach((row) => makeRowClickable(row));
-    console.log(`🖱️ [MYM] Made ${rows.length} list rows clickable`);
+    // Désactivé : les lignes ne doivent plus être cliquables
+    return;
   }
 
   // ========================================
@@ -458,10 +414,10 @@
     // // // // console.log("🔍 [MYM] Initializing observers...");
     // // // // console.log("🔍 [MYM] Available modules:", Object.keys(contentAPI));
 
-    // Make list rows fully clickable
-    makeListRowsClickable();
+    // Désactivé : les lignes ne doivent plus être cliquables
+    // makeListRowsClickable();
 
-    // Observer for new chat cards (for badges and clickable rows)
+    // Observer for new chat cards (for badges only, clickable rows disabled)
     if (badgesEnabled && contentAPI.badges) {
       // // // // console.log("✅ [MYM] Setting up badges observer");
       observer = new MutationObserver((mutations) => {
@@ -473,11 +429,11 @@
                 : [];
               if (node.matches && node.matches(LIST_ROW_SELECTOR)) {
                 contentAPI.badges.scanSingleCard(node);
-                makeRowClickable(node);
+                // Désactivé : makeRowClickable(node);
               }
               cards.forEach((card) => {
                 contentAPI.badges.scanSingleCard(card);
-                makeRowClickable(card);
+                // Désactivé : makeRowClickable(card);
               });
             }
           });
@@ -715,17 +671,34 @@
   (async function init() {
     // // // // console.log("🎬 [MYM] Initializing extension...");
 
-    // 1. Initialize feature flags
+    // 1. Vérifier d'abord si les fonctionnalités sont activées (check background.js flags)
+    const mainFlags = await contentAPI.safeStorageGet("local", [
+      "mym_live_enabled",
+      "mym_badges_enabled",
+      "mym_stats_enabled",
+      "mym_emoji_enabled",
+      "mym_notes_enabled",
+      "mym_broadcast_enabled",
+    ]);
+
+    // Si TOUTES les fonctionnalités sont désactivées, ne rien charger
+    const anyEnabled = Object.values(mainFlags).some((val) => val === true);
+    if (!anyEnabled) {
+      console.log("⏸️ [MYM] Toutes les fonctionnalités sont désactivées - extension non chargée");
+      return;
+    }
+
+    // 2. Initialize feature flags
     await initializeFeatureFlags();
 
-    // 2. Check if extension is enabled
+    // 3. Check if extension is enabled
     const isEnabled = await readEnabledFlag(true);
     if (!isEnabled) {
       // // // // console.log("⏸️ [MYM] Extension disabled by user");
       return;
     }
 
-    // 3. Verify subscription
+    // 4. Verify subscription
     const token = await contentAPI.safeStorageGet("local", ["access_token"]);
     if (token.access_token && contentAPI.api) {
       try {
