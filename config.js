@@ -39,6 +39,17 @@ const TIMING_CONFIG = {
   RELOAD_LOOP_WINDOW: 30000, // 30 secondes - fenêtre pour détection de boucle
 };
 
+// 🎨 Thème et couleurs de l'extension
+const THEME_CONFIG = {
+  // Gradient principal (violet)
+  PRIMARY_GRADIENT_START: "rgb(102, 126, 234)",
+  PRIMARY_GRADIENT_END: "rgb(118, 75, 162)",
+
+  // Couleurs d'état
+  HOVER_OVERLAY: "rgba(255, 255, 255, 0.2)",
+  BORDER_LIGHT: "rgba(255, 255, 255, 0.3)",
+};
+
 // Export de la configuration active
 const activeConfig = CONFIG[ENVIRONMENT];
 
@@ -50,6 +61,7 @@ const APP_CONFIG = {
   FRONTEND_URL: activeConfig.FRONTEND_URL,
   SIGNIN_URL: activeConfig.SIGNIN_URL,
   ...TIMING_CONFIG,
+  ...THEME_CONFIG,
 };
 
 // Export pour window (content scripts) et globalThis (service worker)

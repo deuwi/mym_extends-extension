@@ -60,17 +60,25 @@
     mym_notes_enabled: false,
   };
 
-  // 🔄 Écouter les changements dans le storage (pour la connexion Google)
+  // 🔄 Écouter les changements dans le storage (pour la connexion Google et le background)
   chrome.storage.onChanged.addListener((changes, areaName) => {
-    if (
-      areaName === "local" &&
-      (changes.access_token || changes.firebaseToken)
-    ) {
-      console.log("🔄 Token changed, refreshing UI...");
-      // Attendre un peu que toutes les valeurs soient stockées
-      setTimeout(() => {
-        initializeAuth();
-      }, 100);
+    if (areaName === "local") {
+      // Rafraîchir si le token change OU si les features sont activées (= background a vérifié)
+      const tokenChanged = changes.access_token || changes.firebaseToken;
+      const featuresChanged =
+        changes.mym_live_enabled ||
+        changes.mym_badges_enabled ||
+        changes.mym_stats_enabled ||
+        changes.mym_emoji_enabled ||
+        changes.mym_notes_enabled;
+
+      if (tokenChanged || featuresChanged) {
+        // console.log("🔄 Storage changed, refreshing UI...", { tokenChanged, featuresChanged });
+        // Attendre un peu que toutes les valeurs soient stockées
+        setTimeout(() => {
+          initializeAuth();
+        }, 100);
+      }
     }
   });
 
@@ -138,24 +146,17 @@
     const hasActiveAccess = hasSubscription || hasTrial || hasAgencyLicense;
 
     // N'afficher la section licence que si l'utilisateur n'a pas déjà un accès actif
-    console.log("🔍 License section debug:", {
-      licenseSection: !!licenseSection,
-      hasAgencyLicense,
-      hasSubscription,
-      hasTrial,
-      shouldShow: hasAgencyLicense || (!hasSubscription && !hasTrial),
-    });
 
     if (licenseSection) {
       if (hasAgencyLicense || (!hasSubscription && !hasTrial)) {
-        console.log("✅ Showing license section");
+        // console.log("✅ Showing license section");
         licenseSection.style.display = "block";
         // Vérifier et afficher le formulaire ou le statut de licence
         checkLicense().then((licenseData) => {
           showLicenseSection(licenseData);
         });
       } else {
-        console.log("❌ Hiding license section");
+        // console.log("❌ Hiding license section");
         licenseSection.style.display = "none";
       }
     } else {
@@ -222,7 +223,7 @@
 
   // 🔓 Activer automatiquement toutes les fonctionnalités
   function enableAllFeaturesAutomatically() {
-    console.log("🔓 Auto-activation de toutes les fonctionnalités...");
+    // console.log("🔓 Auto-activation de toutes les fonctionnalités...");
 
     // Activer tous les toggles dans le storage
     const allEnabled = {
@@ -234,7 +235,7 @@
     };
 
     chrome.storage.local.set(allEnabled, () => {
-      console.log("✅ Toutes les fonctionnalités activées automatiquement");
+      // console.log("✅ Toutes les fonctionnalités activées automatiquement");
 
       // Mettre à jour l'UI
       Object.entries(toggles).forEach(([elementId, storageKey]) => {
@@ -342,7 +343,7 @@
             }
 
             const result = await res.json();
-            console.log("✅ Abonnement vérifié:", result);
+            // console.log("✅ Abonnement vérifié:", result);
 
             // Stocker l'email si disponible
             if (result.email) {
@@ -635,7 +636,7 @@
     // Écouter les changements dans le storage pour détecter le nouveau token
     const storageListener = (changes, areaName) => {
       if (areaName === "local" && changes.firebaseToken) {
-        console.log("✅ Nouveau token Firebase détecté");
+        // console.log("✅ Nouveau token Firebase détecté");
 
         // Vérifier l'abonnement avec ce token
         checkSubscription().then(() => {
@@ -799,7 +800,7 @@
               headers,
             });
             if (!res.ok) {
-              console.log("ℹ️ Aucune licence agence trouvée");
+              // console.log("ℹ️ Aucune licence agence trouvée");
               resolve(null);
               return;
             }
@@ -1026,7 +1027,7 @@
   // Au chargement du popup, forcer la vérification de la licence
   setTimeout(() => {
     chrome.runtime.sendMessage({ action: "checkLicense" }, (response) => {
-      console.log("🔓 Vérification de la licence au chargement du popup");
+      // console.log("🔓 Vérification de la licence au chargement du popup");
     });
   }, 500);
 })();

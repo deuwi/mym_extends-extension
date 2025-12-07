@@ -18,6 +18,7 @@ $filesToCopy = @(
     "content.js",
     "popup.html",
     "popup.js",
+    "popup.css",
     "auth-bridge.js",
     "detector.js",
     "manifest.json"
@@ -30,6 +31,27 @@ foreach ($file in $filesToCopy) {
     } else {
         Write-Host "  MISSING $file" -ForegroundColor Red
     }
+}
+
+# Copier le dossier modules
+Write-Host "Copying modules folder..." -ForegroundColor Yellow
+if (Test-Path "modules") {
+    Copy-Item -Path "modules" -Destination $buildDir -Recurse
+    Write-Host "  OK modules/" -ForegroundColor Green
+} else {
+    Write-Host "  MISSING modules/" -ForegroundColor Red
+}
+
+# Copier le dossier icons s'il existe
+if (Test-Path "icons") {
+    Copy-Item -Path "icons" -Destination $buildDir -Recurse
+    Write-Host "  OK icons/" -ForegroundColor Green
+}
+
+# Copier le dossier css s'il existe
+if (Test-Path "css") {
+    Copy-Item -Path "css" -Destination $buildDir -Recurse
+    Write-Host "  OK css/" -ForegroundColor Green
 }
 
 Write-Host ""

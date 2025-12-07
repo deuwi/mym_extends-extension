@@ -2,15 +2,20 @@
 
 // 🦊 Firefox utilise 'browser' nativement, Chrome utilise 'chrome'
 // On créé un alias unifié
-if (typeof browser !== 'undefined') {
+if (typeof browser !== "undefined") {
   // Firefox - utiliser l'API native
-  if (typeof chrome === 'undefined') {
+  if (typeof chrome === "undefined") {
     globalThis.chrome = browser;
   }
 }
 
-console.log("🚀 [BACKGROUND] Script starting...");
-console.log("🔍 [BACKGROUND] Runtime detected:", typeof browser !== 'undefined' ? 'Firefox (browser API)' : 'Chrome (chrome API)');
+// console.log("🚀 [BACKGROUND] Script starting...");
+console.log(
+  "🔍 [BACKGROUND] Runtime detected:",
+  typeof browser !== "undefined"
+    ? "Firefox (browser API)"
+    : "Chrome (chrome API)"
+);
 
 // Configuration is loaded via manifest.json scripts array for Firefox compatibility
 try {
@@ -18,7 +23,7 @@ try {
     "🔍 [BACKGROUND] Checking APP_CONFIG:",
     typeof globalThis.APP_CONFIG
   );
-  console.log("🔍 [BACKGROUND] APP_CONFIG value:", globalThis.APP_CONFIG);
+  // console.log("🔍 [BACKGROUND] APP_CONFIG value:", globalThis.APP_CONFIG);
 } catch (e) {
   console.error("❌ [BACKGROUND] Error checking APP_CONFIG:", e);
 }
@@ -35,7 +40,79 @@ console.log(
     TOKEN_MAX_AGE / (24 * 60 * 60 * 1000)
   } jours`
 );
-console.log("✅ [BACKGROUND] Initialization complete");
+// console.log("✅ [BACKGROUND] Initialization complete");
+
+// 🎨 Fonction pour mettre à jour l'icône de l'extension selon le statut
+function updateExtensionIcon(status) {
+  const iconSets = {
+    connected: {
+      16: "icons/icon-connected-16.png",
+      48: "icons/icon-connected-48.png",
+      128: "icons/icon-connected-128.png",
+    },
+    disconnected: {
+      16: "icons/icon-disconnected-16.png",
+      48: "icons/icon-disconnected-48.png",
+      128: "icons/icon-disconnected-128.png",
+    },
+    error: {
+      16: "icons/icon-error-16.png",
+      48: "icons/icon-error-48.png",
+      128: "icons/icon-error-128.png",
+    },
+  };
+
+  try {
+    // Chrome MV3 utilise chrome.action, Firefox MV2 utilise chrome.browserAction
+    // Safari peut utiliser browser.browserAction
+    const iconAPI =
+      chrome.action ||
+      chrome.browserAction ||
+      (typeof browser !== "undefined" && browser.browserAction);
+
+    if (iconAPI && iconAPI.setIcon) {
+      const iconPath = iconSets[status] || iconSets.disconnected;
+
+      // Safari et Firefox peuvent nécessiter un callback
+      iconAPI.setIcon(
+        {
+          path: iconPath,
+        },
+        () => {
+          if (chrome.runtime.lastError) {
+            console.warn(
+              "⚠️ [BACKGROUND] Icon update warning:",
+              chrome.runtime.lastError.message
+            );
+          } else {
+            console.log(`🎨 [BACKGROUND] Icon updated to: ${status}`);
+          }
+        }
+      );
+    } else {
+      console.warn("⚠️ [BACKGROUND] Icon API not available");
+    }
+  } catch (err) {
+    console.error("❌ [BACKGROUND] Error updating icon:", err);
+  }
+}
+
+// 🔄 Vérifier le statut de connexion au démarrage
+function checkConnectionStatus() {
+  chrome.storage.local.get(
+    ["firebaseToken", "access_token", "user_email"],
+    (data) => {
+      if (data.firebaseToken || data.access_token) {
+        updateExtensionIcon("connected");
+      } else {
+        updateExtensionIcon("disconnected");
+      }
+    }
+  );
+}
+
+// Vérifier au démarrage
+checkConnectionStatus();
 
 // 🩺 Heartbeat pour vérifier que le background reste actif sur Firefox
 setInterval(() => {
@@ -49,7 +126,7 @@ setInterval(() => {
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   // 🔓 Message pour vérifier la licence agence
   if (message.action === "checkLicense") {
-    console.log("📨 Message reçu: vérification de la licence demandée");
+    // console.log("📨 Message reçu: vérification de la licence demandée");
     checkAndEnableFeatures().then(() => {
       sendResponse({ success: true });
     });
@@ -58,7 +135,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
   // 🔥 Nouveau: Support pour Firebase Token depuis la page web
   if (message.type === "FIREBASE_TOKEN" && message.token) {
-    console.log("✅ Background: Received Firebase token from web");
+    // console.log("✅ Background: Received Firebase token from web");
 
     // Stocker le token + email + user_id + timestamp ET activer toutes les features
     chrome.storage.local.set(
@@ -83,6 +160,9 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         // Vérifier immédiatement le statut d'abonnement et la licence
         checkSubscriptionStatus();
         checkAndEnableFeatures();
+
+        // 🎨 Mettre à jour l'icône après connexion
+        updateExtensionIcon("connected");
 
         // Envoyer une réponse au content script
         sendResponse({ success: true });
@@ -119,7 +199,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         mym_broadcast_enabled: true,
       },
       () => {
-        // console.log("✅ Background: Token stored and features enabled");
+        // // console.log("✅ Background: Token stored and features enabled");
         // console.log(
         //   "🔍 Token reçu:",
         //   message.data.access_token?.substring(0, 20) + "..."
@@ -199,14 +279,14 @@ async function checkSubscriptionStatus() {
 
       // Si pas de token ni email, ne rien faire (utilisateur pas connecté)
       if (!token && !email) {
-        console.log("ℹ️  Pas de token - utilisateur non connecté");
+        // console.log("ℹ️  Pas de token - utilisateur non connecté");
         return;
       }
 
       // Si token trop vieux (365 jours), NE PAS désactiver, juste logger
       // L'utilisateur devra se reconnecter mais on ne supprime rien
       if (token && ageMs > ninetyDays) {
-        // console.log("⚠️  Token expiré (>365 jours) - veuillez vous reconnecter");
+        // // console.log("⚠️  Token expiré (>365 jours) - veuillez vous reconnecter");
         // Ne pas désactiver les features, juste informer
         return;
       }
@@ -263,7 +343,7 @@ async function checkSubscriptionStatus() {
 
         // Vérifier si l'email est vérifié (depuis le champ de la réponse)
         if (result.email_verified === false) {
-          // console.log("⚠️  Email non vérifié - désactivation des features");
+          // // console.log("⚠️  Email non vérifié - désactivation des features");
           disableAllFeatures();
 
           // Informer l'utilisateur
@@ -281,14 +361,14 @@ async function checkSubscriptionStatus() {
 
         // Vérifier si l'abonnement est actif OU période d'essai valide
         if (result.subscription_active || result.trial_days_remaining > 0) {
-          // console.log("✅ Accès actif :", {
+          // // console.log("✅ Accès actif :", {
           //   subscription: result.subscription_active,
           //   trial: result.trial_days_remaining,
           // });
           // Tout est OK, ne rien faire
         } else {
           // SEULEMENT si l'abonnement est vraiment expiré (pas le token)
-          // console.log("⚠️  Abonnement expiré - désactivation des features");
+          // // console.log("⚠️  Abonnement expiré - désactivation des features");
           disableAllFeatures();
 
           // Supprimer le token car l'abonnement est expiré
@@ -298,7 +378,7 @@ async function checkSubscriptionStatus() {
             "user_email",
           ]);
 
-          // console.log("⚠️ Abonnement expiré - token supprimé");
+          // // console.log("⚠️ Abonnement expiré - token supprimé");
         }
       } catch (err) {
         console.error("❌ Erreur vérification statut:", err);
@@ -319,7 +399,8 @@ function disableAllFeatures() {
       mym_broadcast_enabled: false,
     },
     () => {
-      // console.log("🚫 Toutes les fonctionnalités désactivées");
+      // // console.log("🚫 Toutes les fonctionnalités désactivées");
+      updateExtensionIcon("disconnected");
     }
   );
 }
@@ -336,16 +417,21 @@ async function checkAndEnableFeatures() {
     // Récupérer les données d'authentification
     const storageData = await new Promise((resolve) => {
       chrome.storage.local.get(
-        ["firebaseToken", "user_email", "access_token_stored_at"],
+        [
+          "firebaseToken",
+          "access_token",
+          "user_email",
+          "access_token_stored_at",
+        ],
         resolve
       );
     });
-    const token = storageData.firebaseToken;
+    const token = storageData.firebaseToken || storageData.access_token;
     const email = storageData.user_email;
     const tokenStoredAt = storageData.access_token_stored_at;
 
     if (!token && !email) {
-      console.log("ℹ️ Pas de token ni d'email - utilisateur non connecté");
+      // console.log("ℹ️ Pas de token ni d'email - utilisateur non connecté");
       return;
     }
 
@@ -464,7 +550,7 @@ async function checkAndEnableFeatures() {
 
       await chrome.storage.local.set(allEnabled);
     } else {
-      console.log("🚫 Pas d'accès actif - désactivation des fonctionnalités");
+      // console.log("🚫 Pas d'accès actif - désactivation des fonctionnalités");
 
       const allDisabled = {
         mym_live_enabled: false,
@@ -509,7 +595,7 @@ checkAndEnableFeatures();
 
 // Vérifier aussi quand le service worker se réveille
 self.addEventListener("activate", () => {
-  console.log("🔄 Service worker activé - vérification de la licence...");
+  // console.log("🔄 Service worker activé - vérification de la licence...");
   checkAndEnableFeatures();
 });
 
@@ -556,11 +642,11 @@ async function refreshFirebaseToken() {
     });
 
     if (!data.firebaseToken || !data.user_email) {
-      console.log("ℹ️ Pas de token Firebase à rafraîchir");
+      // console.log("ℹ️ Pas de token Firebase à rafraîchir");
       return;
     }
 
-    console.log("🔄 Rafraîchissement automatique du token Firebase...");
+    // console.log("🔄 Rafraîchissement automatique du token Firebase...");
 
     // Envoyer un message aux content scripts pour déclencher le rafraîchissement
     chrome.tabs.query({ url: "https://creators.mym.fans/*" }, (tabs) => {
@@ -574,3 +660,20 @@ async function refreshFirebaseToken() {
     console.error("❌ Erreur lors du rafraîchissement du token:", err);
   }
 }
+
+// 🎨 Écouter les changements de stockage pour mettre à jour l'icône en temps réel
+chrome.storage.onChanged.addListener((changes, areaName) => {
+  if (areaName === "local") {
+    // Vérifier si les tokens Firebase ou access_token ont changé
+    if (changes.firebaseToken || changes.access_token) {
+      const hasFirebaseToken = changes.firebaseToken?.newValue;
+      const hasAccessToken = changes.access_token?.newValue;
+
+      if (hasFirebaseToken || hasAccessToken) {
+        updateExtensionIcon("connected");
+      } else {
+        updateExtensionIcon("disconnected");
+      }
+    }
+  }
+});
