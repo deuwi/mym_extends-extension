@@ -258,10 +258,10 @@
         return;
       }
 
-      const token = await contentAPI.safeStorageGet("local", ["access_token"]);
-      if (!token.access_token) return;
-
       try {
+        const token = await contentAPI.safeStorageGet("local", ["access_token"]);
+        if (!token.access_token) return;
+
         const isActive = await contentAPI.api.checkSubscription(
           token.access_token
         );
@@ -270,7 +270,10 @@
           stopSubscriptionMonitoring();
         }
       } catch (err) {
-        console.error("❌ [MYM] Subscription check error:", err);
+        // Don't log error if extension context is invalidated
+        if (err.message !== "Extension context invalidated") {
+          console.error("❌ [MYM] Subscription check error:", err);
+        }
       }
     }, SUBSCRIPTION_CHECK_INTERVAL);
   }

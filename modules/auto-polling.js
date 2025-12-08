@@ -77,6 +77,13 @@
   // POLL ONCE
   // ========================================
   async function pollOnce() {
+    // Check if extension context is still valid
+    if (!chrome.runtime || !chrome.runtime.id) {
+      console.warn("⚠️ [MYM Polling] Extension context invalidated, stopping polling");
+      stopPolling();
+      return;
+    }
+
     const now = Date.now();
 
     // Prevent too frequent polling

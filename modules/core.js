@@ -76,6 +76,12 @@
    */
   API.safeStorageGet = function (area, keys) {
     return new Promise((resolve, reject) => {
+      // Check if extension context is still valid
+      if (!chrome.runtime || !chrome.runtime.id) {
+        reject(new Error("Extension context invalidated"));
+        return;
+      }
+
       try {
         const storageArea =
           area === "sync"
@@ -101,6 +107,12 @@
 
   API.safeStorageSet = function (area, items) {
     return new Promise((resolve, reject) => {
+      // Check if extension context is still valid
+      if (!chrome.runtime || !chrome.runtime.id) {
+        reject(new Error("Extension context invalidated"));
+        return;
+      }
+
       try {
         const storageArea =
           area === "sync"
@@ -126,6 +138,12 @@
 
   API.safeStorageRemove = function (area, keys) {
     return new Promise((resolve, reject) => {
+      // Check if extension context is still valid
+      if (!chrome.runtime || !chrome.runtime.id) {
+        reject(new Error("Extension context invalidated"));
+        return;
+      }
+
       try {
         const storageArea =
           area === "sync"
