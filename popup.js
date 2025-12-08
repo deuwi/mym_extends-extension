@@ -97,10 +97,20 @@
         const token = data.firebaseToken || data.access_token;
         const tokenTime = data.access_token_stored_at;
         
+        // 🔍 Vérifier si les features sont activées (le background a déjà vérifié l'abonnement)
+        const anyFeatureEnabled = Object.values(toggles).some(
+          (storageKey) => data[storageKey] === true
+        );
+        
         if (!token) {
           // Pas de token - afficher formulaire de connexion
           showAuthSection();
           disableAllToggles();
+        } else if (anyFeatureEnabled) {
+          // Features activées = Background a vérifié l'abonnement = OK
+          // Vérifier quand même pour afficher les infos (mais ne pas bloquer si erreur)
+          console.log("✅ Features activées détectées, affichage interface utilisateur");
+          verifyToken(token, data.user_email);
         } else if (tokenTime) {
           // Vérifier l'âge seulement si on a un timestamp
           const now = Date.now();
