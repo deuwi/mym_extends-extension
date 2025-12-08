@@ -182,7 +182,7 @@
   function init() {
     debugLog('🚫 [AdBlocker] Initializing ad blocker...');
 
-    // Initial cleanup
+    // Immediate cleanup - run as soon as possible
     const initialRemoved = removeAdBanners();
     
     if (initialRemoved > 0) {
@@ -192,10 +192,17 @@
     // Setup observer for dynamic ads
     setupMutationObserver();
 
-    // Periodic check (backup for missed mutations)
+    // More aggressive periodic checks
     setInterval(() => {
       removeAdBanners();
-    }, 5000); // Check every 5 seconds
+    }, 1000); // Check every second for better coverage
+
+    // Also check on visibility change (tab focus)
+    document.addEventListener('visibilitychange', () => {
+      if (!document.hidden) {
+        removeAdBanners();
+      }
+    });
 
     debugLog('✅ [AdBlocker] Ad blocker initialized');
   }
@@ -211,9 +218,19 @@
     };
   }
 
-  // Wait for DOM ready
+  // Run immediately - don't wait for anything
+  // First attempt: remove any existing ads
+  removeAdBanners();
+  
+  // Initialize when possible
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', init);
+    // Also try on interactive state
+    document.addEventListener('readystatechange', () => {
+      if (document.readyState === 'interactive' || document.readyState === 'complete') {
+        removeAdBanners();
+      }
+    });
   } else {
     init();
   }

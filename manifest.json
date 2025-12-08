@@ -36,6 +36,8 @@
       ],
       "css": ["styles/ad-blocker.css"],
       "js": [
+        "ad-blocker-early.js",
+        "modules/ad-blocker.js",
         "config.js",
         "modules/core.js",
         "modules/api.js",
@@ -48,10 +50,9 @@
         "modules/keyboard-shortcuts.js",
         "modules/auto-polling.js",
         "modules/sidebar-toggle.js",
-        "modules/ad-blocker.js",
         "content.js"
       ],
-      "run_at": "document_idle"
+      "run_at": "document_start"
     },
     {
       "matches": [

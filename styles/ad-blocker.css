@@ -4,19 +4,26 @@
  * Prevents visual flash of ads before JavaScript removal
  */
 
-/* Hide ad banners */
-details.ad-banner,
-.ad-banner,
-[class*="ad-banner"],
-[id*="advertisement"] {
+/* Hide ad banners - Maximum specificity */
+html body details.ad-banner,
+html body details[class*="ad-banner"],
+html body .ad-banner,
+html body [class*="ad-banner"],
+html body [id*="advertisement"],
+html body [data-track-event-name*="banner"] {
   display: none !important;
   visibility: hidden !important;
   opacity: 0 !important;
   height: 0 !important;
+  max-height: 0 !important;
   width: 0 !important;
+  max-width: 0 !important;
   margin: 0 !important;
   padding: 0 !important;
   overflow: hidden !important;
+  position: absolute !important;
+  left: -9999px !important;
+  pointer-events: none !important;
 }
 
 /* Prevent layout shift when ads are removed */
