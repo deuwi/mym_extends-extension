@@ -361,6 +361,12 @@
     pollingInProgress = true;
 
     try {
+      // Check if extension context is still valid
+      if (!chrome.runtime || !chrome.runtime.id) {
+        pollingInProgress = false;
+        return;
+      }
+
       const token = await contentAPI.safeStorageGet("local", ["access_token"]);
       if (!token.access_token) {
         pollingInProgress = false;
@@ -384,7 +390,10 @@
         injectNewMessages(data.data);
       }
     } catch (err) {
-      console.error("❌ [MYM] Polling error:", err);
+      // Don't log error if extension context is invalidated
+      if (err.message !== "Extension context invalidated") {
+        console.error("❌ [MYM] Polling error:", err);
+      }
     } finally {
       pollingInProgress = false;
     }
