@@ -508,16 +508,26 @@ async function checkSubscriptionStatusSync() {
 
           const result = await res.json();
 
+          console.log("📊 [BACKGROUND] Subscription check result:", {
+            email_verified: result.email_verified,
+            subscription_active: result.subscription_active,
+            trial_days_remaining: result.trial_days_remaining,
+            agency_license_active: result.agency_license_active
+          });
+
           if (result.email_verified === false) {
+            console.warn("⚠️ Email non vérifié");
             disableAllFeatures();
             resolve(false);
             return;
           }
 
-          if (result.subscription_active || result.trial_days_remaining > 0) {
+          if (result.subscription_active || result.trial_days_remaining > 0 || result.agency_license_active) {
+            console.log("✅ Accès accordé (subscription, trial ou agency)");
             resolve(true);
           } else {
             // Abonnement expiré : désactiver les features mais GARDER la connexion
+            console.warn("⚠️ Aucun accès actif détecté");
             disableAllFeatures();
             // ⚠️ NE PAS supprimer les credentials - l'utilisateur reste connecté
             resolve(false);
