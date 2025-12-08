@@ -200,13 +200,11 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           },
           () => {
             console.log(
-              "✅ Background: Firebase token stored (features activation pending subscription check)"
+              "✅ Background: Firebase token stored (checking subscription status...)"
             );
 
-            // 🎨 Mettre à jour l'icône après connexion (même sans abonnement)
-            updateExtensionIcon("connected");
-
-            // Vérifier le statut d'abonnement et activer les features SI valide
+            // Ne pas mettre l'icône à "connected" tout de suite
+            // Vérifier d'abord le statut d'abonnement qui mettra à jour l'icône
             checkSubscriptionStatus().then(() => {
               // Si l'abonnement est valide, les features seront activées automatiquement
               // Sinon, l'utilisateur restera connecté mais sans accès aux features
@@ -434,12 +432,14 @@ async function checkSubscriptionStatus() {
             mym_emoji_enabled: true,
             mym_notes_enabled: true,
           });
+          updateExtensionIcon("connected");
         } else {
           // Abonnement expiré : GARDER la connexion mais DÉSACTIVER les features
           console.log(
             "⚠️ Abonnement expiré - désactivation des fonctionnalités (utilisateur reste connecté)"
           );
           disableAllFeatures();
+          updateExtensionIcon("disconnected");
 
           // ⚠️ NE PAS supprimer les credentials - l'utilisateur reste connecté
           // Il pourra voir son statut dans la popup et renouveler son abonnement
@@ -849,8 +849,12 @@ chrome.storage.onChanged.addListener((changes, areaName) => {
       const hasAccessToken = changes.access_token?.newValue;
 
       if (hasFirebaseToken || hasAccessToken) {
-        updateExtensionIcon("connected");
+        // Ne pas mettre l'icône à "connected" directement
+        // Vérifier d'abord l'abonnement
+        console.log("🔄 Token détecté, vérification de l'abonnement...");
+        checkAndEnableFeatures();
       } else {
+        // Token supprimé = déconnexion
         updateExtensionIcon("disconnected");
       }
     }
