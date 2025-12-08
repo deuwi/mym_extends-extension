@@ -111,8 +111,11 @@ function checkConnectionStatus() {
   );
 }
 
-// Vérifier au démarrage
-checkConnectionStatus();
+// ⚠️ NE PAS appeler checkConnectionStatus() au démarrage
+// L'icône sera mise à jour par checkAndEnableFeatures() après vérification de l'abonnement
+
+// Icône par défaut au démarrage (sera mise à jour par checkAndEnableFeatures)
+updateExtensionIcon("disconnected");
 
 // 🩺 Heartbeat pour vérifier que le background reste actif sur Firefox
 setInterval(() => {
