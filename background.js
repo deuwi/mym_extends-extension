@@ -151,6 +151,18 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true; // Indique qu'on va répondre de manière asynchrone
   }
 
+  // 🔥 CHROME FIX: Message pour forcer la vérification de l'abonnement
+  if (message.type === "FORCE_SUBSCRIPTION_CHECK") {
+    console.log("🔄 [BACKGROUND] Forced subscription check requested from content script");
+    checkAndEnableFeatures().then(() => {
+      sendResponse({ success: true });
+    }).catch((err) => {
+      console.error("❌ [BACKGROUND] Error during forced check:", err);
+      sendResponse({ success: false, error: err.message });
+    });
+    return true; // Réponse asynchrone
+  }
+
   // 🔥 Nouveau: Support pour Firebase Token depuis la page web
   if (message.type === "FIREBASE_TOKEN" && message.token) {
     // console.log("✅ Background: Received Firebase token from web");

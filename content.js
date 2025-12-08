@@ -738,6 +738,18 @@
   (async function init() {
     // // // // console.log("🎬 [MYM] Initializing extension...");
 
+    // 🔥 CHROME FIX: Forcer la vérification de l'abonnement au chargement de la page
+    // Car le service worker Chrome ne se réveille pas toujours avec les alarmes
+    try {
+      chrome.runtime.sendMessage({ type: "FORCE_SUBSCRIPTION_CHECK" }, (response) => {
+        if (chrome.runtime.lastError) {
+          console.log("⚠️ [MYM] Could not reach background (extension reloading?)");
+        }
+      });
+    } catch (e) {
+      // Ignore si le background n'est pas disponible
+    }
+
     // 1. Vérifier d'abord si les fonctionnalités sont activées (check background.js flags)
     const mainFlags = await contentAPI.safeStorageGet("local", [
       "mym_live_enabled",
