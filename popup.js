@@ -95,21 +95,25 @@
       (data) => {
         // Priorité au firebaseToken, sinon access_token
         const token = data.firebaseToken || data.access_token;
-        const tokenTime = data.access_token_stored_at || 0;
-        const now = Date.now();
-        const ageMs = now - tokenTime;
-        const ninetyDays = 365 * 24 * 60 * 60 * 1000; // 365 jours au lieu de 90
-
+        const tokenTime = data.access_token_stored_at;
+        
         if (!token) {
           // Pas de token - afficher formulaire de connexion
           showAuthSection();
           disableAllToggles();
-        } else if (data.access_token && ageMs > ninetyDays) {
-          // Token expiré mais on vérifie quand même l'abonnement
-          // L'utilisateur devra peut-être se reconnecter
+        } else if (tokenTime) {
+          // Vérifier l'âge seulement si on a un timestamp
+          const now = Date.now();
+          const ageMs = now - tokenTime;
+          const maxAge = 365 * 24 * 60 * 60 * 1000; // 365 jours
+          
+          if (ageMs > maxAge) {
+            console.warn(`⚠️ Token trop ancien (${Math.floor(ageMs / (24 * 60 * 60 * 1000))} jours), vérification avec backend`);
+          }
+          // Toujours vérifier avec le backend, même si ancien
           verifyToken(token, data.user_email);
         } else {
-          // Token valide - vérifier avec le backend
+          // Pas de timestamp (firebaseToken sans access_token_stored_at) - vérifier directement
           verifyToken(token, data.user_email);
         }
 
@@ -425,13 +429,14 @@
             )} jours) - déconnexion`
           );
           chrome.storage.local.remove(
-            ["access_token", "access_token_stored_at", "user_id", "user_email"],
+            ["access_token", "firebaseToken", "access_token_stored_at", "user_id", "user_email"],
             () => {
               showStatus(
                 "⚠️ Votre session a expiré. Veuillez vous reconnecter.",
                 "error"
               );
               showAuthSection();
+              disableAllToggles();
             }
           );
           return;

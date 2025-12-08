@@ -138,6 +138,11 @@
         }
       }
     } catch (error) {
+      // Don't log error if extension context is invalidated
+      if (error.message === "Extension context invalidated") {
+        stopPolling();
+        return;
+      }
       console.error("❌ [MYM Polling] Error:", error);
     }
   }
