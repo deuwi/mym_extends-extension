@@ -454,6 +454,7 @@ async function checkSubscriptionStatus() {
 
 // Version synchrone pour vérification immédiate (retourne une Promise)
 async function checkSubscriptionStatusSync() {
+  console.log("🔍 [BACKGROUND] checkSubscriptionStatusSync called");
   return new Promise((resolve) => {
     chrome.storage.local.get(
       ["access_token", "firebaseToken", "user_email"],
@@ -461,7 +462,14 @@ async function checkSubscriptionStatusSync() {
         const token = data.firebaseToken || data.access_token;
         const email = data.user_email;
 
+        console.log("🔍 [BACKGROUND] Storage data:", {
+          hasFirebaseToken: !!data.firebaseToken,
+          hasAccessToken: !!data.access_token,
+          email: email
+        });
+
         if (!token && !email) {
+          console.warn("⚠️ [BACKGROUND] No token or email found");
           resolve(false);
           return;
         }
@@ -478,6 +486,7 @@ async function checkSubscriptionStatusSync() {
               }
             : { Authorization: `Bearer ${token}` };
 
+          console.log(`🔍 [BACKGROUND] Calling ${API_BASE}/check-subscription`);
           const res = await fetch(API_BASE + "/check-subscription", {
             headers,
           });
