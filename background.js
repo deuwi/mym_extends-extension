@@ -180,7 +180,11 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
           // Fermer l'onglet d'authentification
           if (sender.tab && sender.tab.id) {
-            chrome.tabs.remove(sender.tab.id);
+            chrome.tabs.get(sender.tab.id, (tab) => {
+              if (!chrome.runtime.lastError && tab) {
+                chrome.tabs.remove(sender.tab.id);
+              }
+            });
           }
 
           return;
@@ -215,7 +219,11 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
             // Fermer l'onglet d'authentification si c'est le sender
             if (sender.tab && sender.tab.id) {
-              chrome.tabs.remove(sender.tab.id);
+              chrome.tabs.get(sender.tab.id, (tab) => {
+                if (!chrome.runtime.lastError && tab) {
+                  chrome.tabs.remove(sender.tab.id);
+                }
+              });
             }
           }
         );
@@ -590,8 +598,16 @@ function disableAllFeatures() {
               "🔄 Rechargement des onglets pour appliquer la désactivation"
             );
             chrome.tabs.query({ url: "*://*.mym.fans/*" }, (tabs) => {
+              if (chrome.runtime.lastError) {
+                console.warn("⚠️ Tab query error:", chrome.runtime.lastError.message);
+                return;
+              }
               tabs.forEach((tab) => {
-                chrome.tabs.reload(tab.id);
+                chrome.tabs.get(tab.id, (existingTab) => {
+                  if (!chrome.runtime.lastError && existingTab) {
+                    chrome.tabs.reload(tab.id);
+                  }
+                });
               });
             });
           } else {
@@ -848,9 +864,17 @@ async function refreshFirebaseToken() {
 
     // Envoyer un message aux content scripts pour déclencher le rafraîchissement
     chrome.tabs.query({ url: "https://creators.mym.fans/*" }, (tabs) => {
+      if (chrome.runtime.lastError) {
+        console.warn("⚠️ Tab query error:", chrome.runtime.lastError.message);
+        return;
+      }
       if (tabs && tabs.length > 0) {
-        chrome.tabs.sendMessage(tabs[0].id, {
-          type: "REFRESH_FIREBASE_TOKEN",
+        chrome.tabs.get(tabs[0].id, (tab) => {
+          if (!chrome.runtime.lastError && tab) {
+            chrome.tabs.sendMessage(tabs[0].id, {
+              type: "REFRESH_FIREBASE_TOKEN",
+            });
+          }
         });
       }
     });
