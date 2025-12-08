@@ -324,8 +324,28 @@
             });
             if (!res.ok) {
               console.error("❌ Erreur API:", res.status);
-              showAuthSection();
-              disableAllToggles();
+              
+              // Si 401, token invalide - déconnecter
+              if (res.status === 401) {
+                chrome.storage.local.remove(
+                  ["access_token", "firebaseToken", "access_token_stored_at", "user_id", "user_email"],
+                  () => {
+                    showAuthSection();
+                    disableAllToggles();
+                    showStatus("🔒 Session expirée. Veuillez vous reconnecter.", "error");
+                  }
+                );
+              } else {
+                // Erreur réseau/serveur - garder l'utilisateur connecté
+                showUserSection(email || "Utilisateur", {
+                  subscription_active: false,
+                  trial_days_remaining: 0,
+                  status: "error",
+                  email_verified: true,
+                });
+                showStatus("⚠️ Impossible de vérifier l'abonnement (erreur serveur)", "error");
+                enableAllToggles();
+              }
               resolve();
               return;
             }
@@ -336,8 +356,15 @@
               console.error(
                 `❌ Réponse non-JSON reçue (${contentType}), erreur serveur`
               );
-              showAuthSection();
-              disableAllToggles();
+              // Erreur serveur - garder l'utilisateur connecté
+              showUserSection(email || "Utilisateur", {
+                subscription_active: false,
+                trial_days_remaining: 0,
+                status: "error",
+                email_verified: true,
+              });
+              showStatus("⚠️ Erreur serveur, veuillez réessayer plus tard", "error");
+              enableAllToggles();
               resolve();
               return;
             }
@@ -354,8 +381,15 @@
             resolve();
           } catch (err) {
             console.error("❌ Erreur vérification abonnement:", err);
-            showAuthSection();
-            disableAllToggles();
+            // Erreur réseau - garder l'utilisateur connecté
+            showUserSection(email || "Utilisateur", {
+              subscription_active: false,
+              trial_days_remaining: 0,
+              status: "error",
+              email_verified: true,
+            });
+            showStatus("⚠️ Impossible de vérifier l'abonnement (erreur réseau)", "error");
+            enableAllToggles();
             resolve();
           }
         }
@@ -427,13 +461,14 @@
         if (res.status === 401) {
           console.warn("🔒 Token expiré - déconnexion nécessaire");
           chrome.storage.local.remove(
-            ["access_token", "access_token_stored_at", "user_id", "user_email"],
+            ["access_token", "firebaseToken", "access_token_stored_at", "user_id", "user_email"],
             () => {
               showStatus(
                 "⚠️ Votre session a expiré. Veuillez vous reconnecter.",
                 "error"
               );
               showAuthSection();
+              disableAllToggles();
             }
           );
           return;
