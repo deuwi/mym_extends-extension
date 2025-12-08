@@ -35,11 +35,20 @@
   "content_scripts": [
     {
       "matches": [
+        "https://creators.mym.fans/*"
+      ],
+      "css": ["styles/ad-blocker.css"],
+      "js": ["ad-blocker-early.js"],
+      "run_at": "document_start"
+    },
+    {
+      "matches": [
         "https://creators.mym.fans/app/chat/*",
         "https://creators.mym.fans/app/myms*",
         "https://creators.mym.fans/app/account/my-followers*"
       ],
       "js": [
+        "modules/ad-blocker.js",
         "config.js",
         "modules/core.js",
         "modules/api.js",
