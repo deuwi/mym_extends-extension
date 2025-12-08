@@ -373,6 +373,7 @@
     listContainer.className = "mym-conversations-list-content";
     listContainer.style.cssText = `
       overflow-y: auto;
+      overflow-x: hidden;
       max-height: calc(100vh - 400px);
       padding: 10px 0;
     `;
