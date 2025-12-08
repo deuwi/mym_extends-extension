@@ -1,20 +1,33 @@
-// config.js - Configuration centralisée pour l'extension MYM Chat Live
-// Permet de basculer facilement entre environnement local et production
+/**
+ * config.js - Centralized configuration for MYM Chat Live Extension
+ * Allows easy switching between local and production environments
+ * @module config
+ */
 
-// Environnement actuel : "local" ou "production"
+// ⚙️ Environment: "local" | "production"
 const ENVIRONMENT = "production";
 
-// Configuration par environnement
+// 🐛 Debug mode: set to true to enable console logging
+const DEBUG = false;
+
+/**
+ * Environment-specific configuration
+ * @type {Object.<string, {API_BASE: string, FRONTEND_URL: string, SIGNIN_URL: string, CREATORS_URL: string, PRICING_URL: string}>}
+ */
 const CONFIG = {
   local: {
     API_BASE: "http://127.0.0.1:8080/api",
     FRONTEND_URL: "http://localhost:5173",
     SIGNIN_URL: "http://localhost:5173/signin",
+    CREATORS_URL: "https://creators.mym.fans",
+    PRICING_URL: "http://localhost:5173/pricing",
   },
   production: {
     API_BASE: "https://mymchat.fr/api",
     FRONTEND_URL: "https://mymchat.fr",
     SIGNIN_URL: "https://mymchat.fr/signin",
+    CREATORS_URL: "https://creators.mym.fans",
+    PRICING_URL: "https://mymchat.fr/pricing",
   },
 };
 
@@ -50,22 +63,42 @@ const THEME_CONFIG = {
   BORDER_LIGHT: "rgba(255, 255, 255, 0.3)",
 };
 
-// Export de la configuration active
+/**
+ * Helper function for conditional logging
+ * Only logs when DEBUG is enabled
+ * @param {...any} args - Arguments to log
+ */
+const debugLog = (...args) => {
+  if (DEBUG) {
+    console.log(...args);
+  }
+};
+
+// Export active configuration
 const activeConfig = CONFIG[ENVIRONMENT];
 
-// Variables globales accessibles dans toute l'extension
-// Utilise globalThis pour compatibilité service worker et content scripts
+/**
+ * Global configuration object accessible throughout the extension
+ * Uses globalThis for compatibility with both service workers and content scripts
+ * @type {Object}
+ */
 const APP_CONFIG = {
   ENVIRONMENT,
+  DEBUG,
   API_BASE: activeConfig.API_BASE,
   FRONTEND_URL: activeConfig.FRONTEND_URL,
   SIGNIN_URL: activeConfig.SIGNIN_URL,
+  CREATORS_URL: activeConfig.CREATORS_URL,
+  PRICING_URL: activeConfig.PRICING_URL,
   ...TIMING_CONFIG,
   ...THEME_CONFIG,
+  debugLog, // Helper function for conditional logging
 };
 
-// Export pour window (content scripts) et globalThis (service worker)
+// Export for window (content scripts) and globalThis (service worker)
 if (typeof window !== "undefined") {
   window.APP_CONFIG = APP_CONFIG;
+  window.debugLog = debugLog;
 }
 globalThis.APP_CONFIG = APP_CONFIG;
+globalThis.debugLog = debugLog;
