@@ -32,7 +32,7 @@
     button.className = "button button--icon button--secondary";
     button.title = "Afficher le menu";
     button.style.cssText = `
-      margin-left: 8px;
+      margin-right: 8px;
       display: inline-flex;
       font-size: 20px;
     `;

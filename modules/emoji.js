@@ -1272,6 +1272,9 @@
       background: linear-gradient(135deg, ${window.APP_CONFIG.PRIMARY_GRADIENT_START} 0%, ${window.APP_CONFIG.PRIMARY_GRADIENT_END} 100%);
       border: none;
       border-radius: 50%;
+      width: 36px;
+      height: 36px;
+      padding: 0;
       font-size: 20px;
       cursor: pointer;
       display: flex;

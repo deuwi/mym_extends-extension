@@ -46,13 +46,13 @@
         cached &&
         Date.now() - cached.timestamp < contentAPI.USER_INFO_CACHE_DURATION
       ) {
-        console.log(`✅ [MYM Badges] Using cached data for ${username}`);
+        // console.log(`✅ [MYM Badges] Using cached data for ${username}`);
         badgeFetchController = null;
         return cached.data;
       }
     }
 
-    console.log(`🌐 [MYM Badges] Fetching fresh data for ${username}...`);
+    // console.log(`🌐 [MYM Badges] Fetching fresh data for ${username}...`);
 
     const info = {
       username: username,
@@ -253,30 +253,30 @@
       card.querySelector(".list__row__right"); // Dernière option
 
     // Debug: afficher tous les conteneurs possibles
-    console.log(
-      `🔍 [MYM Badges] Looking for badge container in card.${card.className}`
-    );
-    console.log(
-      `  - .user-card__nickname-container: ${!!card.querySelector(
-        ".user-card__nickname-container"
-      )}`
-    );
-    console.log(
-      `  - .nickname_profile: ${!!card.querySelector(".nickname_profile")}`
-    );
-    console.log(
-      `  - .list__row__label: ${!!card.querySelector(".list__row__label")}`
-    );
-    console.log(
-      `  - .list__row__right: ${!!card.querySelector(".list__row__right")}`
-    );
+    // console.log(
+    //   `🔍 [MYM Badges] Looking for badge container in card.${card.className}`
+    // );
+    // console.log(
+    //   `  - .user-card__nickname-container: ${!!card.querySelector(
+    //     ".user-card__nickname-container"
+    //   )}`
+    // );
+    // console.log(
+    //   `  - .nickname_profile: ${!!card.querySelector(".nickname_profile")}`
+    // );
+    // console.log(
+    //   `  - .list__row__label: ${!!card.querySelector(".list__row__label")}`
+    // );
+    // console.log(
+    //   `  - .list__row__right: ${!!card.querySelector(".list__row__right")}`
+    // );
 
     if (targetContainer) {
       if (badge) targetContainer.appendChild(badge);
       if (categoryBadge) targetContainer.appendChild(categoryBadge);
-      console.log(
-        `✅ [MYM Badges] Badge inserted in ${targetContainer.className}`
-      );
+      // console.log(
+      //   `✅ [MYM Badges] Badge inserted in ${targetContainer.className}`
+      // );
     } else {
       console.warn(
         `⚠️ [MYM Badges] No target container found in card`,
@@ -326,24 +326,24 @@
     const mainContainers = document.querySelectorAll(
       'main, [role="main"], .main, .page, .app, .container'
     );
-    console.log(`  Found ${mainContainers.length} main containers`);
+    // console.log(`  Found ${mainContainers.length} main containers`);
 
     mainContainers.forEach((container, idx) => {
-      console.log(`    [${idx}] ${container.tagName}.${container.className}`);
-      console.log(
-        `        Children (${container.children.length}):`,
-        Array.from(container.children)
-          .slice(0, 5)
-          .map((c) => `${c.tagName}.${c.className}`)
-          .join(", ")
-      );
+      // console.log(`    [${idx}] ${container.tagName}.${container.className}`);
+      // console.log(
+      //   `        Children (${container.children.length}):`,
+      //   Array.from(container.children)
+      //     .slice(0, 5)
+      //     .map((c) => `${c.tagName}.${c.className}`)
+      //     .join(", ")
+      // );
     });
 
     // Chercher spécifiquement des liens vers /app/chat/
     const allChatLinks = document.querySelectorAll('a[href*="/app/chat/"]');
-    console.log(
-      `🔍 [MYM Badges] Found ${allChatLinks.length} links to /app/chat/`
-    );
+    // console.log(
+    //   `🔍 [MYM Badges] Found ${allChatLinks.length} links to /app/chat/`
+    // );
 
     if (allChatLinks.length > 0) {
       allChatLinks.forEach((link, idx) => {
@@ -352,12 +352,12 @@
           const parent = link.closest(
             '[class*="row"], [class*="card"], [class*="item"], [class*="chat"], [class*="conversation"]'
           );
-          console.log(`    [${idx}] ${link.href}`);
-          console.log(
-            `        Parent: ${
-              parent ? parent.tagName + "." + parent.className : "none"
-            }`
-          );
+          // console.log(`    [${idx}] ${link.href}`);
+          // console.log(
+          //   `        Parent: ${
+          //     parent ? parent.tagName + "." + parent.className : "none"
+          //   }`
+          // );
         }
       });
     }
@@ -377,14 +377,14 @@
     for (const selector of possibleSelectors) {
       const containers = document.querySelectorAll(selector);
       if (containers.length > 0) {
-        console.log(
-          `  ✅ Found ${containers.length} containers with selector: ${selector}`
-        );
+        // console.log(
+        //   `  ✅ Found ${containers.length} containers with selector: ${selector}`
+        // );
 
         containers.forEach((container, idx) => {
-          console.log(
-            `    [${idx}] ${container.tagName}.${container.className} - ${container.children.length} children`
-          );
+          // console.log(
+          //   `    [${idx}] ${container.tagName}.${container.className} - ${container.children.length} children`
+          // );
 
           // Afficher les 3 premiers enfants
           const firstChildren = Array.from(container.children)
@@ -394,7 +394,7 @@
               classes: c.className,
               hasLink: !!c.querySelector('a[href*="/app/chat/"]'),
             }));
-          console.log(`    First 3 children:`, firstChildren);
+          // console.log(`    First 3 children:`, firstChildren);
         });
       }
     }
@@ -410,24 +410,24 @@
         container.classList.contains("sidebar__footer__list") ||
         container.querySelector(".sidebar__footer__list") === container;
       if (isFooter) {
-        console.log(
-          `⏭️ [MYM Badges] Skipping footer container: ${container.className}`
-        );
+        // console.log(
+        //   `⏭️ [MYM Badges] Skipping footer container: ${container.className}`
+        // );
       }
       return !isFooter;
     });
 
-    console.log(
-      `🔍 [MYM Badges] Processing ${listContainers.length} containers (footer excluded)`
-    );
+    // console.log(
+    //   `🔍 [MYM Badges] Processing ${listContainers.length} containers (footer excluded)`
+    // );
 
     for (const container of listContainers) {
       // Debug: afficher la structure HTML du conteneur
-      console.log(`🔍 [MYM Badges] Container classes:`, container.className);
-      console.log(
-        `🔍 [MYM Badges] Container children count:`,
-        container.children.length
-      );
+      // console.log(`🔍 [MYM Badges] Container classes:`, container.className);
+      // console.log(
+      //   `🔍 [MYM Badges] Container children count:`,
+      //   container.children.length
+      // );
 
       const firstChildren = Array.from(container.children)
         .slice(0, 5)
@@ -439,31 +439,31 @@
           linkHref: c.querySelector('a[href*="/app/chat/"]')?.href || "none",
         }));
 
-      console.log(`🔍 [MYM Badges] First 5 children:`, firstChildren);
+      // console.log(`🔍 [MYM Badges] First 5 children:`, firstChildren);
       firstChildren.forEach((child, i) => {
-        console.log(
-          `  [${i}] ${child.tag}.${child.classes || "(no class)"} - Link: ${
-            child.hasLink ? "✅" : "❌"
-          } (${child.linkHref})`
-        );
+        // console.log(
+        //   `  [${i}] ${child.tag}.${child.classes || "(no class)"} - Link: ${
+        //     child.hasLink ? "✅" : "❌"
+        //   } (${child.linkHref})`
+        // );
       });
 
       // Chercher les rows de conversations - le parent du lien trouvé était .list__row__label-container
       let rows = container.querySelectorAll(
         ".list__row, .card-fan, .discussion-item, [class*='conversation']"
       );
-      console.log(
-        `🔍 [MYM Badges] Looking for conversation rows, found ${rows.length} items`
-      );
+      // console.log(
+      //   `🔍 [MYM Badges] Looking for conversation rows, found ${rows.length} items`
+      // );
 
       // Si pas de résultats, chercher directement les conteneurs avec des liens chat
       if (rows.length === 0) {
         const chatLinks = container.querySelectorAll(
           'a[href*="/app/chat/fan/"]'
         );
-        console.log(
-          `🔍 [MYM Badges] Found ${chatLinks.length} chat links directly`
-        );
+        // console.log(
+        //   `🔍 [MYM Badges] Found ${chatLinks.length} chat links directly`
+        // );
 
         // Remonter au parent row pour chaque lien
         rows = Array.from(chatLinks)
@@ -471,19 +471,19 @@
             const row = link.closest(
               '.list__row, [class*="row"], [class*="card"], [class*="item"]'
             );
-            console.log(
-              `    Link ${link.href} → Row: ${row?.className || "not found"}`
-            );
+            // console.log(
+            //   `    Link ${link.href} → Row: ${row?.className || "not found"}`
+            // );
             return row;
           })
           .filter(Boolean);
 
-        console.log(
-          `🔍 [MYM Badges] Extracted ${rows.length} rows from chat links`
-        );
+        // console.log(
+        //   `🔍 [MYM Badges] Extracted ${rows.length} rows from chat links`
+        // );
       }
 
-      console.log(`🔍 [MYM Badges] Found ${rows.length} rows in container`);
+      // console.log(`🔍 [MYM Badges] Found ${rows.length} rows in container`);
 
       for (const row of rows) {
         try {
@@ -518,23 +518,23 @@
           }
 
           if (totalSpentFetched.get(username)) {
-            console.log(`⏭️ [MYM Badges] Already fetched ${username}`);
+            // console.log(`⏭️ [MYM Badges] Already fetched ${username}`);
             continue;
           }
 
-          console.log(`💰 [MYM Badges] Fetching info for ${username}`);
+          // console.log(`💰 [MYM Badges] Fetching info for ${username}`);
           totalSpentFetched.set(username, true);
 
           const info = await fetchUserDetailedInfo(username);
           if (info) {
             if (info.totalSpent > 0) {
-              console.log(
-                `✅ [MYM Badges] Adding badge for ${username}: ${info.totalSpent}€`
-              );
+              // console.log(
+              //   `✅ [MYM Badges] Adding badge for ${username}: ${info.totalSpent}€`
+              // );
             } else {
-              console.log(
-                `✅ [MYM Badges] Adding category badge for ${username} (no spending)`
-              );
+              // console.log(
+              //   `✅ [MYM Badges] Adding category badge for ${username} (no spending)`
+              // );
             }
             await addTotalSpentBadgeToCard(row, info.totalSpent, username);
           } else {

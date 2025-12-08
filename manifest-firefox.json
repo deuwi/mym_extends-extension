@@ -1,7 +1,7 @@
 {
   "manifest_version": 2,
   "name": "MYM Chat Live",
-  "version": "2.0.0",
+  "version": "2.0.1",
   "description": "Extension pour créateurs MYM.fans - Chat Live amélioré, Badges revenus, Emoji Picker, Notes. Essai gratuit 7 jours.",
   "permissions": [
     "storage",
@@ -13,7 +13,10 @@
   "browser_specific_settings": {
     "gecko": {
       "id": "mym-chat-live@mymchat.fr",
-      "strict_min_version": "109.0"
+      "strict_min_version": "140.0",
+      "data_collection_permissions": {
+        "required": ["none"]
+      }
     }
   },
   "browser_action": {
@@ -45,6 +48,7 @@
         "modules/notes.js",
         "modules/stats.js",
         "modules/conversations-list.js",
+        "modules/myms-clickable-rows.js",
         "modules/keyboard-shortcuts.js",
         "modules/auto-polling.js",
         "modules/sidebar-toggle.js",

@@ -88,6 +88,26 @@
         cursor: pointer !important;
       }
       
+      /* Effet hover sur les lignes de conversation - page /app/myms */
+      .page.my-myms .list__row {
+        transition: all 0.2s ease;
+      }
+      
+      .page.my-myms .list__row:hover {
+        background: rgba(102, 126, 234, 0.08) !important;
+        transform: translateX(4px);
+      }
+      
+      /* Effet hover sur les lignes de conversation - liste injectée (sidebar) */
+      aside.sidebar .list__row {
+        transition: all 0.2s ease;
+      }
+      
+      aside.sidebar .list__row:hover {
+        background: rgba(102, 126, 234, 0.08) !important;
+        transform: translateX(4px);
+      }
+      
       .list__row .link--icon-after svg {
         display: none !important;
       }
@@ -108,6 +128,13 @@
         overflow-y: auto !important;
         width: 100% !important;
         padding: 0 !important;
+      }
+      
+      /* Mobile responsive - reduce padding bottom on discussions */
+      @media (max-width: 768px) {
+        .discussions__chats.discussions__chats--creators {
+          padding-bottom: 100px !important;
+        }
       }
     `;
     document.head.appendChild(style);
@@ -678,13 +705,14 @@
       "mym_stats_enabled",
       "mym_emoji_enabled",
       "mym_notes_enabled",
-      "mym_broadcast_enabled",
     ]);
 
     // Si TOUTES les fonctionnalités sont désactivées, ne rien charger
     const anyEnabled = Object.values(mainFlags).some((val) => val === true);
     if (!anyEnabled) {
-      console.log("⏸️ [MYM] Toutes les fonctionnalités sont désactivées - extension non chargée");
+      console.log(
+        "⏸️ [MYM] Toutes les fonctionnalités sont désactivées - extension non chargée"
+      );
       return;
     }
 

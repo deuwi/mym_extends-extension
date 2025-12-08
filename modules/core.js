@@ -151,15 +151,16 @@
 
   /**
    * User category management
+   * Using chrome.storage.sync for cross-browser synchronization
    */
   API.getUserCategory = async function (username) {
-    const items = await API.safeStorageGet("local", ["user_categories"]);
+    const items = await API.safeStorageGet("sync", ["user_categories"]);
     const categories = items.user_categories || {};
     return categories[username] || null;
   };
 
   API.setUserCategory = async function (username, category) {
-    const items = await API.safeStorageGet("local", ["user_categories"]);
+    const items = await API.safeStorageGet("sync", ["user_categories"]);
     const categories = items.user_categories || {};
 
     if (category === null || category === "") {
@@ -168,7 +169,7 @@
       categories[username] = category;
     }
 
-    await API.safeStorageSet("local", { user_categories: categories });
+    await API.safeStorageSet("sync", { user_categories: categories });
   };
 
   /**
@@ -356,4 +357,3 @@
 
   // console.log("✅ [MYM Core] Module loaded");
 })();
-

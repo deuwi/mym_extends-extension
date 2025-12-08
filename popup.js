@@ -3,8 +3,7 @@
   const API_BASE = window.APP_CONFIG?.API_BASE || "https://mymchat.fr";
   const SIGNIN_URL =
     window.APP_CONFIG?.SIGNIN_URL || "https://mymchat.fr/signin";
-  const FRONTEND_URL =
-    window.APP_CONFIG?.FRONTEND_URL || "https://mymchat.fr";
+  const FRONTEND_URL = window.APP_CONFIG?.FRONTEND_URL || "https://mymchat.fr";
   const TOKEN_MAX_AGE =
     window.APP_CONFIG?.TOKEN_MAX_AGE || 365 * 24 * 60 * 60 * 1000;
 
@@ -16,7 +15,6 @@
     "toggle-stats": "mym_stats_enabled",
     "toggle-emoji": "mym_emoji_enabled",
     "toggle-notes": "mym_notes_enabled",
-    "toggle-broadcast": "mym_broadcast_enabled",
   };
 
   // Elements
@@ -603,9 +601,17 @@
 
   // Logout handler
   function handleLogout() {
+    // Supprimer TOUS les tokens et données utilisateur pour permettre de se connecter avec un autre compte
     chrome.storage.local.remove(
-      ["access_token", "access_token_stored_at", "user_email"],
+      [
+        "access_token",
+        "firebaseToken",
+        "access_token_stored_at",
+        "user_email",
+        "user_id",
+      ],
       () => {
+        console.log("🔓 Déconnexion complète - tous les tokens supprimés");
         showAuthSection();
         disableAllToggles();
         emailInput.value = "";
@@ -619,6 +625,13 @@
             if (element) {
               renderToggle(element, false);
             }
+          });
+        });
+
+        // Recharger les onglets MYM pour appliquer la déconnexion
+        chrome.tabs.query({ url: "*://*.mym.fans/*" }, (tabs) => {
+          tabs.forEach((tab) => {
+            chrome.tabs.reload(tab.id);
           });
         });
       }

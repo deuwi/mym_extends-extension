@@ -14,7 +14,9 @@
           "Helvetica", "Arial", sans-serif;
         padding: 0;
         margin: 0;
+        width: 350px;
         min-width: 350px;
+        max-width: 350px;
         background: #020408;
       }
 
@@ -525,22 +527,6 @@
         </div>
       </div>
 
-      <div class="row">
-        <div>
-          <div class="label">Diffusion de masse</div>
-          <div class="hint">Envoyer un message à tous vos contacts</div>
-        </div>
-        <div
-          id="toggle-broadcast"
-          class="toggle"
-          role="button"
-          tabindex="0"
-          aria-label="Toggle Broadcast Messages"
-        >
-          <div class="knob"></div>
-        </div>
-      </div>
-
       <hr class="section-divider" />
 
       <!-- Section Authentification (affichée si non connecté) -->
@@ -610,12 +596,7 @@
           id="pricingLinkContainer"
           style="display: none"
         >
-          <a
-            id="pricingLink"
-            href="#"
-            target="_blank"
-            class="pricing-link"
-          >
+          <a id="pricingLink" href="#" target="_blank" class="pricing-link">
             <span>💳</span>
             <span>Renouveler mon abonnement</span>
           </a>

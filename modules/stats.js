@@ -110,11 +110,16 @@
             <button class="mym-refresh-info" title="Rafraîchir" style="
               background: rgba(255, 255, 255, 0.1);
               border: none;
-              border-radius: 4px;
-              padding: 4px 8px;
+              border-radius: 50%;
+              width: 28px;
+              height: 28px;
+              padding: 0;
+              display: flex;
+              align-items: center;
+              justify-content: center;
               color: white;
               cursor: pointer;
-              font-size: 12px;
+              font-size: 14px;
               transition: all 0.2s;
             ">🔄</button>
           </div>
@@ -173,9 +178,18 @@
           </div>
           <button id="mym-toggle-details" style="
             background: rgba(255, 255, 255, 0.1);
-            border: none; border-radius: 6px;
-            padding: 8px 12px; color: white;
-            cursor: pointer; font-size: 14px;
+            border: none;
+            border-radius: 6px;
+            width: 36px;
+            height: 36px;
+            padding: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            cursor: pointer;
+            font-size: 14px;
+            transition: all 0.2s;
           ">▼</button>
         </div>
 

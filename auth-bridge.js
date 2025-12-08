@@ -49,21 +49,37 @@ if (isExtensionLogin) {
     if (token && email) {
       console.log("✅ Auth Bridge: Token detected!", { email, userId });
 
-      // Demander au site de rafraîchir le token Firebase avant de l'envoyer
-      // Cela garantit que l'extension a un token frais
+      // IMPORTANT: Forcer le rafraîchissement du token Firebase pour éviter d'utiliser un token expiré
       let freshToken = token;
       try {
-        console.log("🔄 Auth Bridge: Requesting fresh token from page...");
+        console.log("🔄 Auth Bridge: Requesting fresh Firebase token...");
 
-        // Déclencher un événement pour demander au site de rafraîchir le token
+        // Déclencher un événement pour demander au frontend de rafraîchir le token
         window.dispatchEvent(new CustomEvent("extension-request-fresh-token"));
 
-        // Attendre un peu que le site rafraîchisse le token
-        await new Promise((resolve) => setTimeout(resolve, 500));
+        // Attendre que le frontend rafraîchisse le token
+        await new Promise((resolve) => setTimeout(resolve, 1500));
 
-        // Récupérer le token possiblement rafraîchi
-        freshToken = localStorage.getItem("access_token") || token;
-        console.log("✅ Auth Bridge: Fresh token obtained");
+        // Récupérer le nouveau token
+        const newToken = localStorage.getItem("access_token");
+        if (newToken && newToken !== token) {
+          freshToken = newToken;
+          console.log(
+            "✅ Auth Bridge: Fresh token obtained (different from old)"
+          );
+        } else {
+          // Si le token n'a pas changé, vérifier s'il est expiré
+          console.log(
+            "⚠️ Auth Bridge: Token unchanged, checking expiration..."
+          );
+
+          // Demander au frontend de valider le token
+          window.dispatchEvent(new CustomEvent("extension-validate-token"));
+          await new Promise((resolve) => setTimeout(resolve, 500));
+
+          freshToken = localStorage.getItem("access_token") || token;
+          console.log("✅ Auth Bridge: Using validated token");
+        }
       } catch (error) {
         console.warn(
           "⚠️ Auth Bridge: Could not refresh token, using existing one",

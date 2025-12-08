@@ -11,10 +11,10 @@
   function injectNotesButtonsInList() {
     if (window.location.pathname !== "/app/myms") return;
 
-    const listRows = document.querySelectorAll(".page.my-myms .list__row");
-    console.log(
-      `📝 [MYM Notes] Found ${listRows.length} user rows on /app/myms`
-    );
+    const userRows = document.querySelectorAll(".page.my-myms .list__row");
+    // console.log(
+    //   `📝 [MYM Notes] Found ${userRows.length} user rows on /app/myms`
+    // );
 
     listRows.forEach((row) => {
       const rightSection = row.querySelector(".list__row__right");
@@ -673,14 +673,16 @@
         background: linear-gradient(135deg, ${window.APP_CONFIG.PRIMARY_GRADIENT_START} 0%, ${window.APP_CONFIG.PRIMARY_GRADIENT_END} 100%);
         border: none;
         border-radius: 50%;
-        font-size: 20px;
+        color: white;
         cursor: pointer;
         display: flex;
         align-items: center;
         justify-content: center;
         width: 36px;
         height: 36px;
-        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        padding: 0;
+        font-size: 18px;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.15);
         transition: all 0.2s;
         margin-right: 8px;
       `;
@@ -688,10 +690,12 @@
 
       button.addEventListener("mouseenter", () => {
         button.style.transform = "scale(1.1)";
+        button.style.boxShadow = "0 4px 8px rgba(0, 0, 0, 0.25)";
       });
 
       button.addEventListener("mouseleave", () => {
         button.style.transform = "scale(1)";
+        button.style.boxShadow = "0 2px 4px rgba(0, 0, 0, 0.15)";
       });
 
       button.addEventListener("click", (e) => {

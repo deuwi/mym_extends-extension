@@ -58,15 +58,38 @@ Write-Host ""
 Write-Host "Chrome build complete!" -ForegroundColor Green
 Write-Host "Package location: $buildDir" -ForegroundColor Cyan
 
-# Créer le fichier .zip pour Chrome Web Store
+# ======== ZIP SOURCE (Non minifié) ========
 Write-Host ""
-Write-Host "Creating .zip for Chrome Web Store..." -ForegroundColor Cyan
+Write-Host "Creating source .zip (non-minified)..." -ForegroundColor Cyan
+$zipPathSource = "mym-chat-live-chrome-source.zip"
+if (Test-Path $zipPathSource) {
+    Remove-Item $zipPathSource -Force
+}
+Compress-Archive -Path "$buildDir\*" -DestinationPath $zipPathSource -Force
+Write-Host "Source ZIP created: $zipPathSource" -ForegroundColor Green
+
+# ======== MINIFICATION ========
+Write-Host ""
+Write-Host "Minifying JavaScript files..." -ForegroundColor Yellow
+node minify.js $buildDir
+if ($LASTEXITCODE -ne 0) {
+    Write-Host "  WARNING: Minification failed, using original files" -ForegroundColor Red
+}
+
+# ======== ZIP MINIFIÉ ========
+Write-Host ""
+Write-Host "Creating minified .zip for Chrome Web Store..." -ForegroundColor Cyan
 $zipPath = "mym-chat-live-chrome.zip"
 if (Test-Path $zipPath) {
     Remove-Item $zipPath -Force
 }
 Compress-Archive -Path "$buildDir\*" -DestinationPath $zipPath -Force
-Write-Host "ZIP created: $zipPath" -ForegroundColor Green
+Write-Host "Minified ZIP created: $zipPath" -ForegroundColor Green
+
+Write-Host ""
+Write-Host "Build summary:" -ForegroundColor Cyan
+Write-Host "  - Source (non-minified): $zipPathSource" -ForegroundColor White
+Write-Host "  - Production (minified): $zipPath" -ForegroundColor White
 
 Write-Host ""
 Write-Host "Next steps:" -ForegroundColor Yellow
