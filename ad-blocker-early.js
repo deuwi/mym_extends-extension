@@ -7,10 +7,18 @@
 (function() {
   'use strict';
   
-  console.log('🚫 [AdBlocker-Early] Starting early ad blocker...');
+  // Silent mode - no console logs in production
+  var DEBUG = false;
+  var log = function() {
+    if (DEBUG) {
+      console.log.apply(console, arguments);
+    }
+  };
+  
+  log('🚫 [AdBlocker-Early] Starting early ad blocker...');
   
   // Aggressive removal function
-  const removeAds = () => {
+  var removeAds = function() {
     let removed = 0;
     const selectors = [
       'details.ad-banner',
@@ -44,21 +52,21 @@
   removeAds();
   
   // Run on every state change
-  const observer = new MutationObserver((mutations) => {
-    const hasAds = mutations.some(m => 
-      Array.from(m.addedNodes).some(node => 
-        node.nodeType === 1 && (
-          node.classList?.contains('ad-banner') ||
-          node.className?.includes?.('ad-banner') ||
-          node.querySelector?.('.ad-banner, details.ad-banner')
-        )
-      )
-    );
+  var observer = new MutationObserver(function(mutations) {
+    var hasAds = mutations.some(function(m) {
+      return Array.from(m.addedNodes).some(function(node) {
+        return node.nodeType === 1 && (
+          node.classList && node.classList.contains('ad-banner') ||
+          node.className && node.className.indexOf && node.className.indexOf('ad-banner') !== -1 ||
+          node.querySelector && node.querySelector('.ad-banner, details.ad-banner')
+        );
+      });
+    });
     
     if (hasAds) {
-      const removed = removeAds();
+      var removed = removeAds();
       if (removed > 0) {
-        console.log(`🚫 [AdBlocker-Early] Blocked ${removed} ad(s)`);
+        log('🚫 [AdBlocker-Early] Blocked ' + removed + ' ad(s)');
       }
     }
   });
@@ -74,17 +82,17 @@
   // Keep checking aggressively for first 10 seconds
   let checkCount = 0;
   const maxChecks = 50; // 50 checks * 200ms = 10 seconds
-  const earlyInterval = setInterval(() => {
-    const removed = removeAds();
+  var earlyInterval = setInterval(function() {
+    var removed = removeAds();
     if (removed > 0) {
-      console.log(`🚫 [AdBlocker-Early] Periodic check removed ${removed} ad(s)`);
+      log('🚫 [AdBlocker-Early] Periodic check removed ' + removed + ' ad(s)');
     }
     checkCount++;
     if (checkCount >= maxChecks) {
       clearInterval(earlyInterval);
-      console.log('🚫 [AdBlocker-Early] Early blocking phase complete');
+      log('🚫 [AdBlocker-Early] Early blocking phase complete');
     }
   }, 200); // Every 200ms for first 10 seconds
   
-  console.log('✅ [AdBlocker-Early] Early blocker initialized');
+  log('✅ [AdBlocker-Early] Early blocker initialized');
 })();
