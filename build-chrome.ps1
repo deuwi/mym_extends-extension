@@ -21,6 +21,7 @@ $filesToCopy = @(
     "popup.css",
     "auth-bridge.js",
     "detector.js",
+    "ad-blocker-early.js",
     "manifest.json"
 )
 
@@ -52,6 +53,12 @@ if (Test-Path "icons") {
 if (Test-Path "css") {
     Copy-Item -Path "css" -Destination $buildDir -Recurse
     Write-Host "  OK css/" -ForegroundColor Green
+}
+
+# Copier le dossier styles s'il existe
+if (Test-Path "styles") {
+    Copy-Item -Path "styles" -Destination $buildDir -Recurse
+    Write-Host "  OK styles/" -ForegroundColor Green
 }
 
 Write-Host ""

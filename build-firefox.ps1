@@ -23,7 +23,8 @@ $filesToCopy = @(
     "popup.js",
     "popup.css",
     "auth-bridge.js",
-    "detector.js"
+    "detector.js",
+    "ad-blocker-early.js"
 )
 
 foreach ($file in $filesToCopy) {
@@ -54,6 +55,12 @@ if (Test-Path "icons") {
 if (Test-Path "css") {
     Copy-Item -Path "css" -Destination $buildDir -Recurse
     Write-Host "  OK css/" -ForegroundColor Green
+}
+
+# Copier le dossier styles s'il existe
+if (Test-Path "styles") {
+    Copy-Item -Path "styles" -Destination $buildDir -Recurse
+    Write-Host "  OK styles/" -ForegroundColor Green
 }
 
 # Utiliser le manifest Firefox - Copier avec encodage UTF8

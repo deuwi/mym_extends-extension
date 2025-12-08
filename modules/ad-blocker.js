@@ -39,65 +39,72 @@
   };
 
   /**
+   * Check if element is actually an ad
+   * @param {HTMLElement} el - Element to check
+   * @returns {boolean} True if element is an ad
+   */
+  var checkIsAd = function(el) {
+    if (!el) return false;
+    
+    // Check class names
+    var className = el.className;
+    if (className && typeof className === 'string') {
+      if (className.indexOf('ad-banner') !== -1) return true;
+      if (className.indexOf('advertisement') !== -1) return true;
+    }
+
+    // Check ID
+    var elId = el.id;
+    if (elId && elId.indexOf('advertisement') !== -1) return true;
+
+    // Check for ad-specific attributes
+    if (el.hasAttribute && el.hasAttribute('data-track-event-name')) {
+      var trackEvent = el.getAttribute('data-track-event-name');
+      if (trackEvent && trackEvent.indexOf('banner') !== -1) return true;
+    }
+
+    // Check for ad content (MYM-specific)
+    if (el.querySelector) {
+      var summary = el.querySelector('summary.ad-banner__header');
+      if (summary) return true;
+    }
+
+    return false;
+  };
+
+  /**
    * Remove all ad banners from the page
    * @returns {number} Number of ads removed
    */
   function removeAdBanners() {
-    let removed = 0;
+    var removed = 0;
+    var selectors = AD_CONFIG.selectors;
 
-    AD_CONFIG.selectors.forEach((selector) => {
+    for (var i = 0; i < selectors.length; i++) {
+      var selector = selectors[i];
       try {
-        const elements = document.querySelectorAll(selector);
-        elements.forEach((element) => {
-          // Verify it's actually an ad (check for ad-related attributes)
-          if (isAdElement(element)) {
-            debugLog(`🚫 [AdBlocker] Removing ad banner: ${selector}`);
+        var elements = document.querySelectorAll(selector);
+        for (var j = 0; j < elements.length; j++) {
+          var element = elements[j];
+          // Verify it's actually an ad
+          if (checkIsAd(element)) {
+            debugLog('🚫 [AdBlocker] Removing ad banner: ' + selector);
             element.remove();
             removed++;
           }
-        });
+        }
       } catch (error) {
-        console.error(`[AdBlocker] Error with selector "${selector}":`, error);
+        console.error('[AdBlocker] Error with selector "' + selector + '":', error);
       }
-    });
+    }
 
     if (removed > 0) {
       stats.blocked += removed;
       stats.lastCheck = new Date().toISOString();
-      debugLog(`🚫 [AdBlocker] Removed ${removed} ad(s). Total: ${stats.blocked}`);
+      debugLog('🚫 [AdBlocker] Removed ' + removed + ' ad(s). Total: ' + stats.blocked);
     }
 
     return removed;
-  }
-
-  /**
-   * Check if element is actually an ad
-   * @param {HTMLElement} element - Element to check
-   * @returns {boolean} True if element is an ad
-   */
-  function isAdElement(element) {
-    // Check class names
-    if (element.className && typeof element.className === 'string') {
-      if (element.className.includes('ad-banner')) return true;
-      if (element.className.includes('advertisement')) return true;
-    }
-
-    // Check ID
-    if (element.id) {
-      if (element.id.includes('advertisement')) return true;
-    }
-
-    // Check for ad-specific attributes
-    if (element.hasAttribute('data-track-event-name')) {
-      const trackEvent = element.getAttribute('data-track-event-name');
-      if (trackEvent && trackEvent.includes('banner')) return true;
-    }
-
-    // Check for ad content (MYM-specific)
-    const summary = element.querySelector('summary.ad-banner__header');
-    if (summary) return true;
-
-    return false;
   }
 
   /**
@@ -106,17 +113,18 @@
    * @param {number} wait - Wait time in ms
    * @returns {Function} Debounced function
    */
-  function debounce(func, wait) {
-    let timeout;
-    return function executedFunction(...args) {
-      const later = () => {
+  var debounce = function(func, wait) {
+    var timeout;
+    return function() {
+      var args = arguments;
+      var later = function() {
         clearTimeout(timeout);
-        func(...args);
+        func.apply(null, args);
       };
       clearTimeout(timeout);
       timeout = setTimeout(later, wait);
     };
-  }
+  };
 
   /**
    * Setup MutationObserver to watch for new ads
@@ -124,39 +132,49 @@
    */
   function setupMutationObserver() {
     // Debounced removal function
-    const debouncedRemove = debounce(() => {
+    var debouncedRemove = debounce(function() {
       removeAdBanners();
     }, AD_CONFIG.debounceDelay);
 
-    const observer = new MutationObserver((mutations) => {
-      let hasNewAds = false;
+    var observer = new MutationObserver(function(mutations) {
+      var hasNewAds = false;
 
-      for (const mutation of mutations) {
+      for (var i = 0; i < mutations.length; i++) {
+        var mutation = mutations[i];
         // Check added nodes
         if (mutation.addedNodes.length > 0) {
-          mutation.addedNodes.forEach((node) => {
-            if (node.nodeType === Node.ELEMENT_NODE) {
+          for (var j = 0; j < mutation.addedNodes.length; j++) {
+            var node = mutation.addedNodes[j];
+            if (node.nodeType === 1) { // ELEMENT_NODE
               // Check if added node is an ad or contains ads
-              if (node.matches && AD_CONFIG.selectors.some(s => {
-                try { return node.matches(s); } catch { return false; }
-              })) {
-                hasNewAds = true;
+              if (node.matches) {
+                for (var k = 0; k < AD_CONFIG.selectors.length; k++) {
+                  try {
+                    if (node.matches(AD_CONFIG.selectors[k])) {
+                      hasNewAds = true;
+                      break;
+                    }
+                  } catch (e) {
+                    // Invalid selector, skip
+                  }
+                }
               }
               
               // Check if added node contains ads
-              if (node.querySelector) {
-                AD_CONFIG.selectors.forEach((selector) => {
+              if (node.querySelector && !hasNewAds) {
+                for (var m = 0; m < AD_CONFIG.selectors.length; m++) {
                   try {
-                    if (node.querySelector(selector)) {
+                    if (node.querySelector(AD_CONFIG.selectors[m])) {
                       hasNewAds = true;
+                      break;
                     }
-                  } catch (error) {
+                  } catch (e) {
                     // Invalid selector, skip
                   }
-                });
+                }
               }
             }
-          });
+          }
         }
       }
 
@@ -183,22 +201,22 @@
     debugLog('🚫 [AdBlocker] Initializing ad blocker...');
 
     // Immediate cleanup - run as soon as possible
-    const initialRemoved = removeAdBanners();
+    var initialRemoved = removeAdBanners();
     
     if (initialRemoved > 0) {
-      debugLog(`🚫 [AdBlocker] Initial cleanup: ${initialRemoved} ad(s) removed`);
+      debugLog('🚫 [AdBlocker] Initial cleanup: ' + initialRemoved + ' ad(s) removed');
     }
 
     // Setup observer for dynamic ads
     setupMutationObserver();
 
     // More aggressive periodic checks
-    setInterval(() => {
+    setInterval(function() {
       removeAdBanners();
     }, 1000); // Check every second for better coverage
 
     // Also check on visibility change (tab focus)
-    document.addEventListener('visibilitychange', () => {
+    document.addEventListener('visibilitychange', function() {
       if (!document.hidden) {
         removeAdBanners();
       }
@@ -213,7 +231,8 @@
    */
   function getStats() {
     return {
-      ...stats,
+      blocked: stats.blocked,
+      lastCheck: stats.lastCheck,
       enabled: true,
     };
   }
@@ -226,7 +245,7 @@
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', init);
     // Also try on interactive state
-    document.addEventListener('readystatechange', () => {
+    document.addEventListener('readystatechange', function() {
       if (document.readyState === 'interactive' || document.readyState === 'complete') {
         removeAdBanners();
       }
