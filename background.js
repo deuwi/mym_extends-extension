@@ -637,6 +637,7 @@ async function checkAndEnableFeatures() {
           mym_notes_enabled: false,
         };
         await chrome.storage.local.set(allDisabled);
+        updateExtensionIcon("disconnected");
         return;
       }
     }
@@ -689,6 +690,7 @@ async function checkAndEnableFeatures() {
           mym_notes_enabled: false,
         };
         await chrome.storage.local.set(allDisabled);
+        updateExtensionIcon("disconnected");
       }
       return;
     }
@@ -722,6 +724,7 @@ async function checkAndEnableFeatures() {
       };
 
       await chrome.storage.local.set(allEnabled);
+      updateExtensionIcon("connected");
     } else {
       // console.log("🚫 Pas d'accès actif - désactivation des fonctionnalités");
 
@@ -734,6 +737,7 @@ async function checkAndEnableFeatures() {
       };
 
       await chrome.storage.local.set(allDisabled);
+      updateExtensionIcon("disconnected");
     }
   } catch (err) {
     // Erreur silencieuse si problème réseau ou backend indisponible
