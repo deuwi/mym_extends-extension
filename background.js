@@ -314,14 +314,17 @@ chrome.runtime.onInstalled.addListener(() => {
 
 // 🔒 Vérification périodique du statut Premium/Trial
 function startSubscriptionCheck() {
+  const interval =
+    (globalThis.APP_CONFIG &&
+      globalThis.APP_CONFIG.SUBSCRIPTION_CHECK_INTERVAL) ||
+    30 * 60 * 1000; // Fallback: 30 minutes
+  
+  console.log(`⏰ [BACKGROUND] Subscription check interval: ${interval / 1000 / 60} minutes`);
+  
   // Vérifier immédiatement au démarrage
   checkSubscriptionStatus();
 
   // Puis vérifier selon l'intervalle configuré
-  const interval =
-    (globalThis.APP_CONFIG &&
-      globalThis.APP_CONFIG.SUBSCRIPTION_CHECK_INTERVAL) ||
-    60 * 60 * 1000;
   setInterval(checkSubscriptionStatus, interval);
 }
 
@@ -563,6 +566,7 @@ let lastReloadTimestamp = 0;
 const RELOAD_COOLDOWN = 5000; // 5 secondes minimum entre les rechargements
 
 function disableAllFeatures() {
+  console.log("🚫 [BACKGROUND] disableAllFeatures called");
   chrome.storage.local.get(
     [
       "mym_live_enabled",
@@ -572,9 +576,11 @@ function disableAllFeatures() {
       "mym_notes_enabled",
     ],
     (currentState) => {
+      console.log("📊 [BACKGROUND] Current features state:", currentState);
       const wasAnyEnabled = Object.values(currentState).some(
         (val) => val === true
       );
+      console.log(`📊 [BACKGROUND] Any feature was enabled: ${wasAnyEnabled}`);
 
       chrome.storage.local.set(
         {
@@ -744,9 +750,17 @@ async function checkAndEnableFeatures() {
 
     const data = await res.json();
 
+    console.log("📊 [BACKGROUND] checkAndEnableFeatures - API response:", {
+      agency_license_active: data.agency_license_active,
+      subscription_active: data.subscription_active,
+      trial_days_remaining: data.trial_days_remaining
+    });
+
     // Si l'utilisateur a une licence agence active OU un abonnement actif, activer les fonctionnalités
     const hasAccess =
-      data.agency_license_active === true || data.subscription_active === true;
+      data.agency_license_active === true || data.subscription_active === true || (data.trial_days_remaining && data.trial_days_remaining > 0);
+
+    console.log(`🔐 [BACKGROUND] Access check: hasAccess=${hasAccess}`);
 
     if (hasAccess) {
       console.log(
@@ -763,8 +777,9 @@ async function checkAndEnableFeatures() {
 
       await chrome.storage.local.set(allEnabled);
       updateExtensionIcon("connected");
+      console.log("✅ [BACKGROUND] Features enabled, icon set to connected");
     } else {
-      // console.log("🚫 Pas d'accès actif - désactivation des fonctionnalités");
+      console.log("🚫 [BACKGROUND] No active access - disabling features");
 
       const allDisabled = {
         mym_live_enabled: false,
@@ -776,6 +791,7 @@ async function checkAndEnableFeatures() {
 
       await chrome.storage.local.set(allDisabled);
       updateExtensionIcon("disconnected");
+      console.log("🚫 [BACKGROUND] Features disabled, icon set to disconnected");
     }
   } catch (err) {
     // Erreur silencieuse si problème réseau ou backend indisponible
@@ -827,6 +843,7 @@ chrome.storage.local.get(["firebaseToken", "user_email"], (data) => {
 const licenseCheckInterval =
   (globalThis.APP_CONFIG && globalThis.APP_CONFIG.LICENSE_CHECK_INTERVAL_MIN) ||
   30;
+console.log(`⏰ [BACKGROUND] License check alarm: every ${licenseCheckInterval} minutes`);
 chrome.alarms.create("checkLicenseAlarm", {
   periodInMinutes: licenseCheckInterval,
 });
@@ -835,15 +852,19 @@ chrome.alarms.create("checkLicenseAlarm", {
 const tokenRefreshInterval =
   (globalThis.APP_CONFIG && globalThis.APP_CONFIG.TOKEN_REFRESH_INTERVAL_MIN) ||
   50;
+console.log(`⏰ [BACKGROUND] Token refresh alarm: every ${tokenRefreshInterval} minutes`);
 chrome.alarms.create("refreshTokenAlarm", {
   periodInMinutes: tokenRefreshInterval,
 });
 
 // Écouter l'alarme
 chrome.alarms.onAlarm.addListener((alarm) => {
+  console.log(`⏰ [BACKGROUND] Alarm triggered: ${alarm.name}`);
   if (alarm.name === "checkLicenseAlarm") {
+    console.log("🔍 [BACKGROUND] Running checkAndEnableFeatures from alarm...");
     checkAndEnableFeatures();
   } else if (alarm.name === "refreshTokenAlarm") {
+    console.log("🔄 [BACKGROUND] Running refreshFirebaseToken from alarm...");
     refreshFirebaseToken();
   }
 });
