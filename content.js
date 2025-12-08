@@ -705,6 +705,34 @@
   window.addEventListener("beforeunload", cleanupAll);
 
   // ========================================
+  // STORAGE CHANGE LISTENER
+  // ========================================
+  chrome.storage.onChanged.addListener((changes, areaName) => {
+    if (areaName === "local") {
+      // Détecter si les features ont été désactivées par le background
+      const featureChanges = [
+        "mym_live_enabled",
+        "mym_badges_enabled", 
+        "mym_stats_enabled",
+        "mym_emoji_enabled",
+        "mym_notes_enabled"
+      ];
+
+      const anyFeatureDisabled = featureChanges.some(
+        key => changes[key] && changes[key].newValue === false && changes[key].oldValue === true
+      );
+
+      if (anyFeatureDisabled) {
+        console.log("⚠️ [MYM] Features disabled by background, reloading page...");
+        // Recharger la page pour désactiver les modules
+        setTimeout(() => {
+          window.location.reload();
+        }, 500);
+      }
+    }
+  });
+
+  // ========================================
   // INITIALIZATION
   // ========================================
   (async function init() {
