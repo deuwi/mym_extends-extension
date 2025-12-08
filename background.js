@@ -30,7 +30,7 @@ try {
 
 const API_BASE =
   (globalThis.APP_CONFIG && globalThis.APP_CONFIG.API_BASE) ||
-  "https://mymchat.fr";
+  "https://mymchat.fr/api";
 const TOKEN_MAX_AGE =
   (globalThis.APP_CONFIG && globalThis.APP_CONFIG.TOKEN_MAX_AGE) ||
   365 * 24 * 60 * 60 * 1000;
@@ -589,7 +589,7 @@ async function checkAndEnableFeatures() {
   try {
     const API_BASE =
       (globalThis.APP_CONFIG && globalThis.APP_CONFIG.API_BASE) ||
-      "http://127.0.0.1:8080";
+      "https://mymchat.fr/api";
     const isLocal =
       (globalThis.APP_CONFIG && globalThis.APP_CONFIG.ENVIRONMENT) === "local";
 
