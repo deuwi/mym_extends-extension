@@ -1,5 +1,69 @@
 # Changelog - MYM Chat Live Extension
 
+## Version 2.0.2 - 8 décembre 2024
+
+### ✨ Nouvelles fonctionnalités
+
+#### Ad Blocker - Blocage des publicités 🚫
+
+- **NOUVEAU** : Module automatique de blocage des bannières publicitaires
+- **Fonctionnalités** :
+  - ✅ Suppression automatique des publicités sur les pages de discussion
+  - ✅ Détection en temps réel des pubs injectées dynamiquement
+  - ✅ Masquage CSS immédiat (aucun flash visuel)
+  - ✅ MutationObserver pour détecter les nouvelles pubs
+  - ✅ Vérification périodique toutes les 5 secondes
+- **Éléments bloqués** :
+  - Bannières `<details class="ad-banner">`
+  - Tous les éléments avec classe contenant "ad-banner"
+  - Éléments avec ID contenant "advertisement"
+- **Impact** : Expérience de navigation plus propre, sans distractions publicitaires
+- **Fichiers** :
+  - `modules/ad-blocker.js` - Module JavaScript
+  - `styles/ad-blocker.css` - Styles de masquage
+
+### 🔧 Améliorations de la qualité de code
+
+#### Outils de linting et formatage
+
+- **ESLint** configuré (`.eslintrc.js`)
+  - Règle `no-console` pour éviter les console.log
+  - Standards ES6+ (prefer-const, no-var, arrow-functions)
+  - Configuration spécifique pour les extensions Chrome
+- **Prettier** configuré (`.prettierrc.json`)
+  - Formatage automatique du code
+  - 100 caractères par ligne
+  - Guillemets doubles, trailing commas
+- **Scripts npm** :
+  ```bash
+  npm run lint          # Vérifier le code
+  npm run lint:fix      # Corriger automatiquement
+  npm run format        # Formater tous les fichiers
+  ```
+
+#### Script de migration des logs
+
+- **Script automatisé** (`scripts/migrate-logs.js`)
+  - Détecte tous les `// console.log` commentés
+  - Propose le remplacement par `debugLog()`
+  - Modes : preview, apply, verify
+- **Guide de migration** (`docs/MIGRATION_LOGS.md`)
+  - Instructions complètes
+  - Exemples de migration
+  - Checklist de vérification
+
+### 📝 Documentation
+
+- **CODE_QUALITY.md** - Guide complet des outils de qualité
+- **MIGRATION_LOGS.md** - Guide de migration des logs
+- **CHANGELOG.md** - Ce fichier (historique des versions)
+- Mise à jour de **IMPROVEMENTS.md** avec toutes les améliorations
+- Mise à jour de **CONTRIBUTING.md** avec les nouveaux standards
+
+---
+
+## Version 2.0.1 - 7 décembre 2024
+
 ## Version en cours - Novembre 2025
 
 ### Fonctionnalités modifiées

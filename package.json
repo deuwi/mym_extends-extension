@@ -1,6 +1,6 @@
 {
   "name": "mym-chat-live-extension",
-  "version": "2.0.1",
+  "version": "2.0.2",
   "description": "Extension for MYM.fans creators - Enhanced chat, revenue badges, emoji picker, notes, and more",
   "private": true,
   "scripts": {
@@ -9,9 +9,13 @@
     "test:coverage": "jest --coverage",
     "lint": "eslint *.js modules/*.js",
     "lint:fix": "eslint --fix *.js modules/*.js",
+    "lint:logs": "node scripts/migrate-logs.js --verify",
+    "migrate:logs:preview": "node scripts/migrate-logs.js --dry-run",
+    "migrate:logs:apply": "node scripts/migrate-logs.js --apply",
     "build:chrome": "powershell -ExecutionPolicy Bypass -File build-chrome.ps1",
     "build:firefox": "powershell -ExecutionPolicy Bypass -File build-firefox.ps1",
     "build": "npm run build:chrome && npm run build:firefox",
+    "prebuild": "npm run lint:check",
     "format": "prettier --write \"**/*.{js,json,md}\"",
     "format:check": "prettier --check \"**/*.{js,json,md}\""
   },

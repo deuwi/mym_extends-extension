@@ -1,0 +1,42 @@
+/**
+ * Ad Blocker Styles
+ * Hides advertising elements immediately on page load
+ * Prevents visual flash of ads before JavaScript removal
+ */
+
+/* Hide ad banners */
+details.ad-banner,
+.ad-banner,
+[class*="ad-banner"],
+[id*="advertisement"] {
+  display: none !important;
+  visibility: hidden !important;
+  opacity: 0 !important;
+  height: 0 !important;
+  width: 0 !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  overflow: hidden !important;
+}
+
+/* Prevent layout shift when ads are removed */
+details.ad-banner + *,
+.ad-banner + * {
+  margin-top: 0 !important;
+}
+
+/* Animation for smooth removal (optional) */
+@keyframes fadeOut {
+  from {
+    opacity: 1;
+    max-height: 500px;
+  }
+  to {
+    opacity: 0;
+    max-height: 0;
+  }
+}
+
+.ad-banner--removing {
+  animation: fadeOut 0.3s ease-out forwards;
+}
