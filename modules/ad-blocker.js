@@ -9,12 +9,12 @@
 (function () {
   "use strict";
 
-  const { debugLog } = window.APP_CONFIG || {};
+  var debugLog = (window.APP_CONFIG && window.APP_CONFIG.debugLog) || function() {};
 
   /**
    * Configuration for ad blocking
    */
-  const AD_CONFIG = {
+  var AD_CONFIG = {
     // CSS selectors for ad elements to remove
     selectors: [
       'details.ad-banner',           // Main ad banner container
@@ -33,7 +33,7 @@
   /**
    * Statistics for blocked ads
    */
-  const stats = {
+  var stats = {
     blocked: 0,
     lastCheck: null,
   };
