@@ -7,7 +7,7 @@
   const TOKEN_MAX_AGE =
     window.APP_CONFIG?.TOKEN_MAX_AGE || 365 * 24 * 60 * 60 * 1000;
 
-  console.log(`🔧 Popup loaded with API_BASE: ${API_BASE}`);
+  // console.log(`🔧 Popup loaded with API_BASE: ${API_BASE}`);
 
   const toggles = {
     toggle: "mym_live_enabled",
@@ -118,7 +118,7 @@
         } else if (anyFeatureEnabled) {
           // Features activées = Background a vérifié l'abonnement = OK
           // Vérifier quand même pour afficher les infos (mais ne pas bloquer si erreur)
-          console.log("✅ Features activées détectées, affichage interface utilisateur");
+          // console.log("✅ Features activées détectées, affichage interface utilisateur");
           verifyToken(token, data.user_email);
         } else if (tokenTime) {
           // Vérifier l'âge seulement si on a un timestamp
@@ -336,12 +336,6 @@
                 }
               : { Authorization: `Bearer ${token}` };
 
-            console.log(
-              `🔧 Mode ${
-                isLocal ? "LOCAL" : "PRODUCTION"
-              }: vérification abonnement`
-            );
-
             const res = await fetch(API_BASE + "/check-subscription", {
               headers,
             });
@@ -472,10 +466,6 @@
             "X-Dev-User-ID": "dev-user",
           }
         : { Authorization: `Bearer ${token}` };
-
-      console.log(
-        `🔧 Mode ${isLocal ? "LOCAL" : "PRODUCTION"}: vérification abonnement`
-      );
 
       const res = await fetch(API_BASE + "/check-subscription", {
         headers,
@@ -658,7 +648,7 @@
         "user_id",
       ],
       () => {
-        console.log("🔓 Déconnexion complète - tous les tokens supprimés");
+        // console.log("🔓 Déconnexion complète - tous les tokens supprimés");
         showAuthSection();
         disableAllToggles();
         hideStatus();
@@ -689,7 +679,7 @@
                 (details) => {
                   if (details) {
                     totalCookiesRemoved++;
-                    console.log(`🍪 Cookie supprimé: ${cookie.name}`);
+                    // console.log(`🍪 Cookie supprimé: ${cookie.name}`);
                   }
                 }
               );
@@ -698,7 +688,7 @@
         });
 
         setTimeout(() => {
-          console.log(`🍪 Total: ${totalCookiesRemoved} cookie(s) mymchat.fr supprimé(s)`);
+          // console.log(`🍪 Total: ${totalCookiesRemoved} cookie(s) mymchat.fr supprimé(s)`);
           
           // Recharger les onglets mymchat.fr pour appliquer la déconnexion
           chrome.tabs.query({ url: "*://mymchat.fr/*" }, (tabs) => {
@@ -1044,9 +1034,7 @@
 
           // Demander au background script de vérifier immédiatement la licence
           chrome.runtime.sendMessage({ action: "checkLicense" }, (response) => {
-            console.log(
-              "🔓 Vérification de la licence demandée au background script"
-            );
+            
           });
         }, 1000);
       } catch (err) {
@@ -1093,9 +1081,7 @@
 
     // Demander au background script de vérifier immédiatement la licence
     chrome.runtime.sendMessage({ action: "checkLicense" }, (response) => {
-      console.log(
-        "🔓 Vérification de la licence demandée au background script (via checkSubscription)"
-      );
+      
     });
   };
 

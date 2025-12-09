@@ -1,13 +1,12 @@
 {
   "manifest_version": 2,
   "name": "MYM Chat Live",
-  "version": "2.0.1",
+  "version": "2.0.3",
   "description": "Extension pour créateurs MYM.fans - Chat Live amélioré, Badges revenus, Emoji Picker, Notes. Essai gratuit 7 jours.",
   "permissions": [
     "storage",
     "alarms",
     "https://creators.mym.fans/*",
-    "https://mym-extends-frontend.pages.dev/*",
     "https://mymchat.fr/*"
   ],
   "browser_specific_settings": {
@@ -70,8 +69,8 @@
     },
     {
       "matches": [
-        "https://mym-extends-frontend.pages.dev/*signin*",
-        "https://mym-extends-frontend.pages.dev/*login*"
+        "https://mymchat.fr/*signin*",
+        "https://mymchat.fr/*login*"
       ],
       "js": ["config.js", "auth-bridge.js"],
       "run_at": "document_idle"
