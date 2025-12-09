@@ -699,6 +699,7 @@ async function checkAndEnableFeatures() {
           "access_token_stored_at",
           "user_id",
           "user_email",
+          "firebaseToken",
         ]);
 
         // Désactiver toutes les fonctionnalités
