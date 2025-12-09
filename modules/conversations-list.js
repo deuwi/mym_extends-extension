@@ -11,6 +11,11 @@
     return;
   }
 
+  // Flag pour éviter les injections multiples
+  let isInjecting = false;
+  let lastInjectionTime = 0;
+  const INJECTION_COOLDOWN = 2000; // 2 secondes entre chaque injection
+
   // ========================================
   // MAKE CLONED ROW CLICKABLE
   // ========================================
@@ -329,21 +334,29 @@
       return;
     }
 
-    // Trouver l'aside
-    const aside = document.querySelector("aside.sidebar");
-    if (!aside) {
-      console.warn("⚠️ [MYM Conversations] Aside not found");
+    // Empêcher les injections multiples simultanées
+    const now = Date.now();
+    if (isInjecting || (now - lastInjectionTime < INJECTION_COOLDOWN)) {
       return;
     }
 
-    // Supprimer le footer pour gagner de la place
-    removeSidebarFooter();
+    isInjecting = true;
 
-    // Vérifier si déjà injecté
-    if (aside.querySelector(".mym-conversations-list")) {
-      // // // console.log("✅ [MYM Conversations] List already injected");
-      return;
-    }
+    try {
+      // Trouver l'aside
+      const aside = document.querySelector("aside.sidebar");
+      if (!aside) {
+        console.warn("⚠️ [MYM Conversations] Aside not found");
+        return;
+      }
+
+      // Supprimer le footer pour gagner de la place
+      removeSidebarFooter();
+
+      // Vérifier si déjà injecté
+      if (aside.querySelector(".mym-conversations-list")) {
+        return;
+      }
 
     // Récupérer les conversations initiales
     const conversations = await fetchConversationsList();
@@ -460,6 +473,10 @@
 
     // Attendre un peu que les stats se chargent
     setTimeout(waitForStats, 100);
+    } finally {
+      isInjecting = false;
+      lastInjectionTime = Date.now();
+    }
   }
 
   // ========================================

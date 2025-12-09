@@ -546,7 +546,7 @@
         statsEnabled = false;
         emojiEnabled = false;
         notesEnabled = false;
-        stopPolling();
+        // NOTE: Polling arrêté par auto-polling.js
 
         // Recharger seulement si on est sur mym.fans
         if (window.location.hostname.includes('mym.fans')) {
@@ -578,7 +578,7 @@
   // CLEANUP
   // ========================================
   function cleanupAll() {
-    stopPolling();
+    // NOTE: Polling nettoyé par auto-polling.js
     stopSubscriptionMonitoring();
 
     if (observer) {

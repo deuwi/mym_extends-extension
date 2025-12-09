@@ -74,8 +74,6 @@
       });
 
       if (newMessagesCount > 0) {
-        console.log(`✅ [MYM Polling] ${newMessagesCount} new message(s) detected`);
-
         // Scroller vers le bas
         const chatBody = document.querySelector(".content-body");
         if (chatBody) {
@@ -96,7 +94,6 @@
   async function pollOnce() {
     // Check if extension context is still valid
     if (!chrome.runtime || !chrome.runtime.id) {
-      console.warn("⚠️ [MYM Polling] Extension context invalidated, stopping polling");
       stopPolling();
       return;
     }
@@ -135,7 +132,6 @@
       });
 
       if (!response.ok) {
-        console.warn(`⚠️ [MYM Polling] HTTP ${response.status}`);
         return;
       }
 
@@ -196,8 +192,6 @@
     const interval = isTabVisible
       ? POLL_INTERVAL_MS
       : POLL_INTERVAL_BACKGROUND_MS;
-
-    console.log(`🔔 [MYM Polling] Started (interval: ${interval}ms)`);
 
     pollingInterval = setInterval(pollOnce, interval);
 
@@ -281,16 +275,10 @@
   // INITIALIZATION
   // ========================================
   function init() {
-    console.log("🚀 [MYM Polling] Module initializing...");
-    console.log("🔍 [MYM Polling] Current URL:", window.location.pathname);
-
     // Start polling if on chat page (support both /app/chat/ID and /app/chat/fan/ID)
     const isChatPage = window.location.pathname.startsWith("/app/chat/");
     if (isChatPage) {
-      console.log("✅ [MYM Polling] Chat page detected, starting polling");
       startPolling();
-    } else {
-      console.log("ℹ️ [MYM Polling] Not on chat page, polling not started");
     }
 
     // Listen to visibility changes
