@@ -420,7 +420,7 @@
 
   function startPolling() {
     if (pollHandle || !chatId) return;
-    // // // // console.log("▶️ [MYM] Starting message polling");
+    console.log("▶️ [MYM] Starting message polling for chat:", chatId);
     pollHandle = setInterval(pollForNewMessages, POLL_INTERVAL_MS);
   }
 
@@ -428,7 +428,7 @@
     if (pollHandle) {
       clearInterval(pollHandle);
       pollHandle = null;
-      // // // // console.log("⏸️ [MYM] Stopped message polling");
+      console.log("⏸️ [MYM] Stopped message polling");
     }
   }
 

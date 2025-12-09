@@ -231,12 +231,15 @@
   // INITIALIZATION
   // ========================================
   function init() {
-    // // // console.log("🚀 [MYM Polling] Module initializing...");
+    console.log("🚀 [MYM Polling] Module initializing...");
 
     // Start polling if on chat page
     const isChatPage = window.location.pathname.includes("/app/chat/fan/");
     if (isChatPage) {
+      console.log("✅ [MYM Polling] Chat page detected, starting polling");
       startPolling();
+    } else {
+      console.log("ℹ️ [MYM Polling] Not on chat page, polling not started");
     }
 
     // Listen to visibility changes
