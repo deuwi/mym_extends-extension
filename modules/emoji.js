@@ -1013,6 +1013,7 @@
     grid.style.cssText = `
       padding: 12px;
       overflow-y: auto;
+      overflow-x: hidden;
       flex: 1;
       display: grid;
       grid-template-columns: repeat(8, 1fr);
