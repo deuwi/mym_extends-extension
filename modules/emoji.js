@@ -1038,32 +1038,33 @@
 
     // Add frequent emojis section at bottom
     const frequentEmojis = getFrequentEmojis();
-    if (frequentEmojis.length > 0) {
-      const frequentSection = document.createElement("div");
-      frequentSection.style.cssText = `
-        padding: 12px;
-        border-top: 1px solid ${window.APP_CONFIG.BORDER_LIGHT};
-        background: linear-gradient(135deg, ${window.APP_CONFIG.PRIMARY_GRADIENT_START} 0%, ${window.APP_CONFIG.PRIMARY_GRADIENT_END} 100%);
-      `;
+    const frequentSection = document.createElement("div");
+    frequentSection.id = "mym-frequent-emojis";
+    frequentSection.style.cssText = `
+      padding: 12px;
+      border-top: 1px solid ${window.APP_CONFIG.BORDER_LIGHT};
+      background: linear-gradient(135deg, ${window.APP_CONFIG.PRIMARY_GRADIENT_START} 0%, ${window.APP_CONFIG.PRIMARY_GRADIENT_END} 100%);
+      display: ${frequentEmojis.length > 0 ? 'block' : 'none'};
+    `;
 
-      const frequentTitle = document.createElement("div");
-      frequentTitle.style.cssText =
-        "font-size: 11px; color: #fff; margin-bottom: 8px; font-weight: 600;";
-      frequentTitle.textContent = "⭐ Fréquents";
+    const frequentTitle = document.createElement("div");
+    frequentTitle.style.cssText =
+      "font-size: 11px; color: #fff; margin-bottom: 8px; font-weight: 600;";
+    frequentTitle.textContent = "⭐ Fréquents";
 
-      const frequentGrid = document.createElement("div");
-      frequentGrid.style.cssText =
-        "display: grid; grid-template-columns: repeat(8, 1fr); gap: 4px;";
+    const frequentGrid = document.createElement("div");
+    frequentGrid.id = "mym-frequent-grid";
+    frequentGrid.style.cssText =
+      "display: grid; grid-template-columns: repeat(8, 1fr); gap: 4px;";
 
-      frequentEmojis.forEach((emoji) => {
-        const btn = createEmojiButton(emoji);
-        frequentGrid.appendChild(btn);
-      });
+    frequentEmojis.forEach((emoji) => {
+      const btn = createEmojiButton(emoji);
+      frequentGrid.appendChild(btn);
+    });
 
-      frequentSection.appendChild(frequentTitle);
-      frequentSection.appendChild(frequentGrid);
-      picker.appendChild(frequentSection);
-    }
+    frequentSection.appendChild(frequentTitle);
+    frequentSection.appendChild(frequentGrid);
+    picker.appendChild(frequentSection);
 
     return picker;
   }
@@ -1167,23 +1168,7 @@
       grid.innerHTML = "";
 
       sorted.forEach(([emoji]) => {
-        const btn = document.createElement("button");
-        btn.className = "mym-emoji-btn";
-        btn.textContent = emoji;
-        btn.title = emoji;
-
-        btn.addEventListener("mouseenter", () => {
-          btn.style.background = "rgba(0,0,0,0.05)";
-          btn.style.transform = "scale(1.2)";
-        });
-
-        btn.addEventListener("mouseleave", () => {
-          btn.style.background = "none";
-          btn.style.transform = "scale(1)";
-        });
-
-        btn.addEventListener("click", () => insertEmoji(emoji));
-
+        const btn = createEmojiButton(emoji);
         grid.appendChild(btn);
       });
     } catch (error) {
