@@ -20,10 +20,7 @@
   // Elements
   const authSection = document.getElementById("auth-section");
   const userSection = document.getElementById("user-section");
-  const emailInput = document.getElementById("emailInput");
-  const passwordInput = document.getElementById("passwordInput");
-  const loginBtn = document.getElementById("loginBtn");
-  const googleSignInBtn = document.getElementById("googleSignInBtn");
+  const connectBtn = document.getElementById("connectBtn");
   const logoutBtn = document.getElementById("logoutBtn");
   const authStatus = document.getElementById("authStatus");
   const userEmailSpan = document.getElementById("userEmail");
@@ -60,9 +57,16 @@
     mym_notes_enabled: false,
   };
 
+  let isInitializing = true; // Flag pour éviter les recharges lors de l'ouverture
+
   // 🔄 Écouter les changements dans le storage (pour la connexion Google et le background)
   chrome.storage.onChanged.addListener((changes, areaName) => {
     if (areaName === "local") {
+      // Ignorer les changements pendant l'initialisation (1 seconde après ouverture)
+      if (isInitializing) {
+        return;
+      }
+
       // Rafraîchir si le token change OU si les features sont activées (= background a vérifié)
       const tokenChanged = changes.access_token || changes.firebaseToken;
       const featuresChanged =
@@ -81,6 +85,11 @@
       }
     }
   });
+
+  // Désactiver le flag d'initialisation après 1 seconde
+  setTimeout(() => {
+    isInitializing = false;
+  }, 1000);
 
   // Function pour initialiser l'authentification
   function initializeAuth() {
@@ -637,18 +646,6 @@
     authStatus.style.display = "none";
   }
 
-  // Login handler - Extension does not support direct login anymore
-  // Users must login via the website (Google Sign-in or Firebase email/password)
-  async function handleLogin() {
-    showStatus(
-      "⚠️ Veuillez vous connecter via le site web (Google Sign-in)",
-      "error"
-    );
-
-    // Open website for login
-    chrome.tabs.create({ url: "https://mymchat.fr" });
-  }
-
   // Logout handler
   function handleLogout() {
     // Supprimer TOUS les tokens et données utilisateur pour permettre de se connecter avec un autre compte
@@ -664,8 +661,6 @@
         console.log("🔓 Déconnexion complète - tous les tokens supprimés");
         showAuthSection();
         disableAllToggles();
-        emailInput.value = "";
-        passwordInput.value = "";
         hideStatus();
 
         // Disable all toggles
@@ -678,20 +673,47 @@
           });
         });
 
-        // Recharger les onglets MYM pour appliquer la déconnexion
-        chrome.tabs.query({ url: "*://*.mym.fans/*" }, (tabs) => {
-          tabs.forEach((tab) => {
-            chrome.tabs.reload(tab.id);
+        // Déconnecter du site mymchat.fr en supprimant les cookies de session
+        const cookieDomains = ["mymchat.fr", ".mymchat.fr"];
+        let totalCookiesRemoved = 0;
+
+        cookieDomains.forEach((domain) => {
+          chrome.cookies.getAll({ domain: domain }, (cookies) => {
+            cookies.forEach((cookie) => {
+              const url = `https://mymchat.fr${cookie.path}`;
+              chrome.cookies.remove(
+                {
+                  url: url,
+                  name: cookie.name,
+                },
+                (details) => {
+                  if (details) {
+                    totalCookiesRemoved++;
+                    console.log(`🍪 Cookie supprimé: ${cookie.name}`);
+                  }
+                }
+              );
+            });
           });
         });
+
+        setTimeout(() => {
+          console.log(`🍪 Total: ${totalCookiesRemoved} cookie(s) mymchat.fr supprimé(s)`);
+          
+          // Recharger les onglets mymchat.fr pour appliquer la déconnexion
+          chrome.tabs.query({ url: "*://mymchat.fr/*" }, (tabs) => {
+            tabs.forEach((tab) => {
+              chrome.tabs.reload(tab.id);
+            });
+          });
+        }, 500);
       }
     );
   }
 
   // Event listeners
-  loginBtn.addEventListener("click", handleLogin);
-  googleSignInBtn.addEventListener("click", () => {
-    // Ouvrir un onglet pour l'authentification Google
+  connectBtn.addEventListener("click", () => {
+    // Ouvrir un onglet pour l'authentification
     chrome.tabs.create({
       url:
         (window.APP_CONFIG?.SIGNIN_URL || "https://mymchat.fr/signin") +
@@ -726,19 +748,6 @@
     }, 60000);
   });
   logoutBtn.addEventListener("click", handleLogout);
-
-  // Enter key support
-  emailInput.addEventListener("keypress", (e) => {
-    if (e.key === "Enter") {
-      passwordInput.focus();
-    }
-  });
-
-  passwordInput.addEventListener("keypress", (e) => {
-    if (e.key === "Enter") {
-      handleLogin();
-    }
-  });
 
   // Toggle handlers
   Object.entries(toggles).forEach(([elementId, storageKey]) => {

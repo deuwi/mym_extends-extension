@@ -11,66 +11,83 @@
     return;
   }
 
-  const POLL_INTERVAL_MS = 10000; // 10 seconds
+  const POLL_INTERVAL_MS = 15000; // 15 seconds
   const POLL_INTERVAL_BACKGROUND_MS = 30000; // 30 seconds when tab is hidden
+  const CONVERSATIONS_POLL_INTERVAL_MS = 30000; // 30 seconds for conversations list
 
   let pollingInterval = null;
+  let conversationsPollingInterval = null;
   let lastPollTime = 0;
+  let lastConversationsPollTime = 0;
   let isTabVisible = true;
 
   // ========================================
-  // MESSAGE INJECTION
+  // MESSAGE INJECTION FROM HTML PARSING
   // ========================================
-  function injectNewMessages(newMessagesHTML) {
-    const chatContainer = document.querySelector(".chat__content");
-    if (!chatContainer) return;
+  function injectNewMessagesFromHTML(html) {
+    try {
+      const parser = new DOMParser();
+      const doc = parser.parseFromString(html, "text/html");
 
-    // Create temporary container to parse new HTML
-    const tempDiv = document.createElement("div");
-    tempDiv.innerHTML = newMessagesHTML;
+      // Trouver tous les messages dans le HTML récupéré
+      const fetchedMessages = doc.querySelectorAll(".chat-message[data-chat-message-id]");
 
-    const newMessages = tempDiv.querySelectorAll(".chat__message");
-    const existingMessages = chatContainer.querySelectorAll(".chat__message");
-
-    // Get IDs of existing messages
-    const existingIds = new Set();
-    existingMessages.forEach((msg) => {
-      const id = msg.getAttribute("data-message-id");
-      if (id) existingIds.add(id);
-    });
-
-    // Inject only new messages
-    let injectedCount = 0;
-    newMessages.forEach((msg) => {
-      const id = msg.getAttribute("data-message-id");
-      if (id && !existingIds.has(id)) {
-        // Add animation class
-        msg.style.opacity = "0";
-        msg.style.transform = "translateY(10px)";
-        msg.style.transition = "opacity 0.3s, transform 0.3s";
-
-        chatContainer.appendChild(msg);
-
-        // Trigger animation
-        setTimeout(() => {
-          msg.style.opacity = "1";
-          msg.style.transform = "translateY(0)";
-        }, 50);
-
-        injectedCount++;
+      // Trouver le conteneur de messages sur la page actuelle
+      const chatContainer = document.querySelector(".discussions__chats");
+      if (!chatContainer) {
+        console.error("❌ [MYM Polling] Chat container not found");
+        return 0;
       }
-    });
 
-    if (injectedCount > 0) {
-      console.log(`📨 [MYM Polling] ${injectedCount} new message(s) injected`);
+      // Obtenir les IDs des messages existants
+      const existingMessages = document.querySelectorAll(".chat-message[data-chat-message-id]");
+      const existingIds = new Set(
+        Array.from(existingMessages).map((msg) =>
+          msg.getAttribute("data-chat-message-id")
+        )
+      );
 
-      // Scroll to bottom
-      setTimeout(() => {
-        chatContainer.scrollTop = chatContainer.scrollHeight;
-      }, 350);
+      let newMessagesCount = 0;
+
+      // Injecter les nouveaux messages
+      fetchedMessages.forEach((fetchedMsg) => {
+        const messageId = fetchedMsg.getAttribute("data-chat-message-id");
+
+        if (!existingIds.has(messageId)) {
+          // Cloner le message complet (y compris le HTML et les classes)
+          const newMessage = fetchedMsg.cloneNode(true);
+
+          // Ajouter une animation de fade-in
+          newMessage.style.opacity = "0";
+          newMessage.style.transition = "opacity 0.3s ease-in";
+
+          // Ajouter le message au conteneur
+          chatContainer.appendChild(newMessage);
+
+          // Trigger l'animation
+          setTimeout(() => {
+            newMessage.style.opacity = "1";
+          }, 10);
+
+          newMessagesCount++;
+        }
+      });
+
+      if (newMessagesCount > 0) {
+        console.log(`✅ [MYM Polling] ${newMessagesCount} new message(s) detected`);
+
+        // Scroller vers le bas
+        const chatBody = document.querySelector(".content-body");
+        if (chatBody) {
+          chatBody.scrollTop = chatBody.scrollHeight;
+        }
+      }
+
+      return newMessagesCount;
+    } catch (error) {
+      console.error("❌ [MYM Polling] Error:", error);
+      return 0;
     }
-
-    return injectedCount;
   }
 
   // ========================================
@@ -94,26 +111,28 @@
 
     lastPollTime = now;
 
-    // Only poll if on a chat page
-    const isChatPage = window.location.pathname.includes("/app/chat/fan/");
-    if (!isChatPage) return;
+    // Only poll if on a chat page (support both /app/chat/ID and /app/chat/fan/ID)
+    const isChatPage = window.location.pathname.startsWith("/app/chat/");
+    if (!isChatPage) {
+      return;
+    }
 
-    const fanId = window.location.pathname.split("/app/chat/fan/")[1];
-    if (!fanId) return;
+    // Extract fanId from URL (support both formats)
+    let fanId = window.location.pathname.split("/app/chat/fan/")[1];
+    if (!fanId) {
+      fanId = window.location.pathname.split("/app/chat/")[1];
+    }
+    if (!fanId) {
+      return;
+    }
 
     try {
-      // // // console.log("🔄 [MYM Polling] Fetching new messages...");
+      // Fetch the chat page HTML directly
+      const pageUrl = `https://creators.mym.fans/app/chat/${fanId}`;
 
-      const response = await fetch(
-        `https://creators.mym.fans/app/chat/fan/${fanId}`,
-        {
-          headers: {
-            Accept: "text/html",
-            "X-Requested-With": "XMLHttpRequest",
-          },
-          credentials: "include",
-        }
-      );
+      const response = await fetch(pageUrl, {
+        credentials: "include", // Send cookies automatically
+      });
 
       if (!response.ok) {
         console.warn(`⚠️ [MYM Polling] HTTP ${response.status}`);
@@ -121,21 +140,13 @@
       }
 
       const html = await response.text();
+      const injectedCount = injectNewMessagesFromHTML(html);
 
-      // Extract chat content
-      const parser = new DOMParser();
-      const doc = parser.parseFromString(html, "text/html");
-      const chatContent = doc.querySelector(".chat__content");
-
-      if (chatContent) {
-        const injectedCount = injectNewMessages(chatContent.innerHTML);
-
-        // Update conversation list if new messages
-        if (injectedCount > 0 && contentAPI.conversations) {
-          setTimeout(() => {
-            contentAPI.conversations.updateConversationsList();
-          }, 500);
-        }
+      // Update conversation list if new messages
+      if (injectedCount > 0 && contentAPI.conversations) {
+        setTimeout(() => {
+          contentAPI.conversations.updateConversationsList();
+        }, 500);
       }
     } catch (error) {
       // Don't log error if extension context is invalidated
@@ -144,6 +155,32 @@
         return;
       }
       console.error("❌ [MYM Polling] Error:", error);
+    }
+  }
+
+  // ========================================
+  // POLL CONVERSATIONS LIST
+  // ========================================
+  async function pollConversationsList() {
+    const now = Date.now();
+
+    // Prevent too frequent polling
+    if (now - lastConversationsPollTime < 10000) {
+      return;
+    }
+
+    lastConversationsPollTime = now;
+
+    // Only update if on a chat page and conversations API is available
+    const isChatPage = window.location.pathname.startsWith("/app/chat/");
+    if (!isChatPage || !contentAPI.conversations) {
+      return;
+    }
+
+    try {
+      await contentAPI.conversations.updateConversationsList();
+    } catch (error) {
+      // Silently ignore errors for conversations list
     }
   }
 
@@ -164,6 +201,13 @@
 
     pollingInterval = setInterval(pollOnce, interval);
 
+    // Start conversations list polling
+    if (!conversationsPollingInterval) {
+      conversationsPollingInterval = setInterval(pollConversationsList, CONVERSATIONS_POLL_INTERVAL_MS);
+      // Initial poll after 5 seconds
+      setTimeout(pollConversationsList, 5000);
+    }
+
     // Initial poll after 3 seconds
     setTimeout(pollOnce, 3000);
   }
@@ -173,6 +217,12 @@
 
     clearInterval(pollingInterval);
     pollingInterval = null;
+
+    // Also stop conversations polling when leaving chat pages
+    if (conversationsPollingInterval) {
+      clearInterval(conversationsPollingInterval);
+      conversationsPollingInterval = null;
+    }
     // // // console.log("⏸️ [MYM Polling] Stopped");
   }
 
@@ -209,7 +259,7 @@
       if (currentUrl !== lastUrl) {
         lastUrl = currentUrl;
 
-        const isChatPage = currentUrl.includes("/app/chat/fan/");
+        const isChatPage = currentUrl.includes("/app/chat/");
 
         if (isChatPage) {
           // // // console.log("🔄 [MYM Polling] Chat page detected, restarting polling");
@@ -232,9 +282,10 @@
   // ========================================
   function init() {
     console.log("🚀 [MYM Polling] Module initializing...");
+    console.log("🔍 [MYM Polling] Current URL:", window.location.pathname);
 
-    // Start polling if on chat page
-    const isChatPage = window.location.pathname.includes("/app/chat/fan/");
+    // Start polling if on chat page (support both /app/chat/ID and /app/chat/fan/ID)
+    const isChatPage = window.location.pathname.startsWith("/app/chat/");
     if (isChatPage) {
       console.log("✅ [MYM Polling] Chat page detected, starting polling");
       startPolling();

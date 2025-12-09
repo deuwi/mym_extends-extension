@@ -24,10 +24,6 @@
     forceRefresh = false,
     source = "badge"
   ) {
-    console.log(
-      `🔍 [MYM Badges] fetchUserDetailedInfo: ${username} (source: ${source})`
-    );
-
     let controller = badgeFetchController;
 
     // Pour userInfoBox, utiliser un controller séparé si nécessaire
@@ -505,9 +501,7 @@
           }
 
           if (!link) {
-            console.log(
-              `⚠️ [MYM Badges] No chat link found in row (tag=${row.tagName}, class=${row.className})`
-            );
+            // Silently skip rows without chat links (e.g., action buttons)
             continue;
           }
 

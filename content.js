@@ -262,13 +262,7 @@
         const token = await contentAPI.safeStorageGet("local", ["access_token"]);
         if (!token.access_token) return;
 
-        const isActive = await contentAPI.api.checkSubscription(
-          token.access_token
-        );
-        if (!isActive) {
-          showSubscriptionExpiredBanner();
-          stopSubscriptionMonitoring();
-        }
+        // NOTE: La vérification de l'abonnement est gérée par background.js
       } catch (err) {
         // Don't log error if extension context is invalidated
         if (err.message !== "Extension context invalidated") {
@@ -356,81 +350,8 @@
   // ========================================
   // MESSAGE POLLING
   // ========================================
-  async function pollForNewMessages() {
-    if (pollingInProgress) return;
-    pollingInProgress = true;
-
-    try {
-      // Check if extension context is still valid
-      if (!chrome.runtime || !chrome.runtime.id) {
-        pollingInProgress = false;
-        return;
-      }
-
-      const token = await contentAPI.safeStorageGet("local", ["access_token"]);
-      if (!token.access_token) {
-        pollingInProgress = false;
-        return;
-      }
-
-      const url = `https://mym.fans/api/conversations/${chatId}/messages?page=1`;
-      const response = await fetch(url, {
-        headers: {
-          Authorization: `Bearer ${token.access_token}`,
-        },
-      });
-
-      if (!response.ok) {
-        pollingInProgress = false;
-        return;
-      }
-
-      const data = await response.json();
-      if (data && data.data && Array.isArray(data.data)) {
-        injectNewMessages(data.data);
-      }
-    } catch (err) {
-      // Don't log error if extension context is invalidated
-      if (err.message !== "Extension context invalidated") {
-        console.error("❌ [MYM] Polling error:", err);
-      }
-    } finally {
-      pollingInProgress = false;
-    }
-  }
-
-  function injectNewMessages(messages) {
-    const container = document.querySelector(".chat-messages");
-    if (!container) return;
-
-    const existingIds = new Set();
-    container.querySelectorAll(MESSAGE_SELECTOR).forEach((msg) => {
-      const id = msg.getAttribute("data-chat-message-id");
-      if (id) existingIds.add(id);
-    });
-
-    messages.forEach((msg) => {
-      if (!existingIds.has(msg.id.toString())) {
-        // Message injection logic would go here
-        // For now, just log
-        // // // // console.log("📨 New message:", msg.id);
-      }
-    });
-  }
-
-  function startPolling() {
-    if (pollHandle || !chatId) return;
-    console.log("▶️ [MYM] Starting message polling for chat:", chatId);
-    pollHandle = setInterval(pollForNewMessages, POLL_INTERVAL_MS);
-  }
-
-  function stopPolling() {
-    if (pollHandle) {
-      clearInterval(pollHandle);
-      pollHandle = null;
-      console.log("⏸️ [MYM] Stopped message polling");
-    }
-  }
+  // NOTE: Le polling des messages est maintenant géré par modules/auto-polling.js
+  // qui parse le HTML au lieu d'utiliser l'API JSON (qui n'existe pas)
 
   // ========================================
   // MAKE LIST ROWS CLICKABLE
@@ -616,11 +537,7 @@
           contentAPI.emojiEnabled = emojiEnabled;
           contentAPI.notesEnabled = notesEnabled;
 
-          readEnabledFlag(false).then((enabled) => {
-            if (enabled) {
-              startPolling();
-            }
-          });
+          // NOTE: Le polling est géré par auto-polling.js
         });
       }
 
@@ -795,16 +712,10 @@
     }
 
     // 4. Verify subscription
+    // NOTE: La vérification de l'abonnement est gérée par background.js
     const token = await contentAPI.safeStorageGet("local", ["access_token"]);
     if (token.access_token && contentAPI.api) {
       try {
-        const isActive = await contentAPI.api.checkSubscription(
-          token.access_token
-        );
-        if (!isActive) {
-          showSubscriptionExpiredBanner();
-          return;
-        }
         startSubscriptionMonitoring();
       } catch (err) {
         console.warn(
@@ -822,10 +733,7 @@
     // 4. Initialize features
     initializeObservers();
 
-    // 5. Start message polling if on chat page
-    if (isChatPage) {
-      startPolling();
-    }
+    // 5. Message polling is now handled by modules/auto-polling.js
 
     // 6. Setup background communication
     setupMessageListener();

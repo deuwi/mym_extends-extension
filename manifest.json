@@ -6,7 +6,7 @@
   "permissions": ["storage", "alarms"],
   "host_permissions": [
     "https://creators.mym.fans/*",
-    "https://mym-extends-frontend.pages.dev/*",
+    "https://mym.fans/*",
     "https://mymchat.fr/*"
   ],
   "background": {
@@ -62,8 +62,8 @@
     },
     {
       "matches": [
-        "https://mym-extends-frontend.pages.dev/*signin*",
-        "https://mym-extends-frontend.pages.dev/*login*"
+        "https://mymchat.fr/*signin*",
+        "https://mymchat.fr/*login*"
       ],
       "js": ["config.js", "auth-bridge.js"],
       "run_at": "document_idle"

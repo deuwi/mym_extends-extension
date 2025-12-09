@@ -167,6 +167,22 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.type === "FIREBASE_TOKEN" && message.token) {
     // console.log("✅ Background: Received Firebase token from web");
 
+    // Vérifier d'abord que l'email est vérifié
+    if (message.emailVerified === false) {
+      console.warn("❌ Background: Email non vérifié, rejet du token");
+      
+      // Informer l'utilisateur
+      sendResponse({
+        success: false,
+        error: "Votre email n'est pas vérifié. Vérifiez votre boîte mail.",
+      });
+
+      // Mettre l'icône en état d'erreur
+      updateExtensionIcon("error");
+
+      return;
+    }
+
     // IMPORTANT: Vérifier que le token n'est pas expiré avant de le stocker
     console.log("🔍 Background: Validating Firebase token...");
 

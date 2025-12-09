@@ -10,8 +10,6 @@
    * Inject user info box in sidebar
    */
   async function injectUserInfoBox(username) {
-    console.log(`📊 [MYM Stats] injectUserInfoBox called for: ${username}`);
-
     if (!username || !contentAPI.statsEnabled) {
       // // // console.log("⏸️ [MYM Stats] No username or stats disabled");
       const existingBox = document.getElementById("mym-user-info-box");

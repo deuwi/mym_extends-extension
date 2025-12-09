@@ -54,7 +54,7 @@
         : "https://creators.mym.fans/app/myms";
 
       if (searchQuery) {
-        console.log(`🔍 [MYM Conversations] Searching for: "${searchQuery}"`);
+        // // // console.log(`🔍 [MYM Conversations] Searching for: "${searchQuery}"`);
       } else {
         // // // console.log("🔍 [MYM Conversations] Fetching list from /app/myms...");
       }
@@ -76,7 +76,6 @@
 
       // Extraire tous les .list__row
       const rows = doc.querySelectorAll(".list__row");
-      console.log(`✅ [MYM Conversations] Found ${rows.length} conversations`);
 
       return Array.from(rows);
     } catch (error) {
@@ -327,13 +326,8 @@
   async function injectConversationsInAside() {
     // Vérifier qu'on est sur une page de chat
     if (!window.location.pathname.startsWith("/app/chat/")) {
-      // // // console.log("⏸️ [MYM Conversations] Not on chat page, skipping");
       return;
     }
-
-    console.log(
-      "🚀 [MYM Conversations] Injecting conversations list in aside..."
-    );
 
     // Trouver l'aside
     const aside = document.querySelector("aside.sidebar");
