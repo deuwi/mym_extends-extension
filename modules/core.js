@@ -168,10 +168,24 @@
   };
 
   /**
+   * Check if extension context is still valid
+   */
+  API.isExtensionValid = function() {
+    try {
+      return chrome.runtime && chrome.runtime.id !== undefined;
+    } catch (e) {
+      return false;
+    }
+  };
+
+  /**
    * User category management
    * Using chrome.storage.sync for cross-browser synchronization
    */
   API.getUserCategory = async function (username) {
+    if (!API.isExtensionValid()) {
+      throw new Error("Extension context invalidated");
+    }
     const items = await API.safeStorageGet("sync", ["user_categories"]);
     const categories = items.user_categories || {};
     return categories[username] || null;

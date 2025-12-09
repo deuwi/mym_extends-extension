@@ -535,6 +535,11 @@
             console.log(`⚠️ [MYM Badges] No info available for ${username}`);
           }
         } catch (e) {
+          // Ignore "Extension context invalidated" errors (extension reload/update)
+          if (e.message && e.message.includes("Extension context invalidated")) {
+            // Silently skip - extension is being reloaded
+            return;
+          }
           console.error("[MYM Badges] Error processing row:", e);
         }
       }
@@ -556,6 +561,10 @@
             await addTotalSpentBadgeToCard(card, info.totalSpent, username);
           }
         } catch (e) {
+          // Ignore "Extension context invalidated" errors (extension reload/update)
+          if (e.message && e.message.includes("Extension context invalidated")) {
+            return;
+          }
           console.error("[MYM Badges] Error processing card:", e);
         }
       }
