@@ -774,6 +774,15 @@ async function checkAndEnableFeatures() {
 
     console.log(`🔐 [BACKGROUND] Access check: hasAccess=${hasAccess}`);
 
+    // Récupérer l'état actuel des features
+    const currentState = await chrome.storage.local.get([
+      'mym_live_enabled',
+      'mym_badges_enabled',
+      'mym_stats_enabled',
+      'mym_emoji_enabled',
+      'mym_notes_enabled'
+    ]);
+
     if (hasAccess) {
       console.log(
         "🔓 Accès actif - activation automatique des fonctionnalités"
@@ -787,9 +796,18 @@ async function checkAndEnableFeatures() {
         mym_notes_enabled: true,
       };
 
-      await chrome.storage.local.set(allEnabled);
-      updateExtensionIcon("connected");
-      console.log("✅ [BACKGROUND] Features enabled, icon set to connected");
+      // Ne mettre à jour que si l'état a vraiment changé
+      const needsUpdate = Object.keys(allEnabled).some(
+        key => currentState[key] !== allEnabled[key]
+      );
+
+      if (needsUpdate) {
+        await chrome.storage.local.set(allEnabled);
+        updateExtensionIcon("connected");
+        console.log("✅ [BACKGROUND] Features enabled, icon set to connected");
+      } else {
+        console.log("ℹ️ [BACKGROUND] Features already enabled, no update needed");
+      }
     } else {
       console.log("🚫 [BACKGROUND] No active access - disabling features");
 
@@ -801,9 +819,18 @@ async function checkAndEnableFeatures() {
         mym_notes_enabled: false,
       };
 
-      await chrome.storage.local.set(allDisabled);
-      updateExtensionIcon("disconnected");
-      console.log("🚫 [BACKGROUND] Features disabled, icon set to disconnected");
+      // Ne mettre à jour que si l'état a vraiment changé
+      const needsUpdate = Object.keys(allDisabled).some(
+        key => currentState[key] !== allDisabled[key]
+      );
+
+      if (needsUpdate) {
+        await chrome.storage.local.set(allDisabled);
+        updateExtensionIcon("disconnected");
+        console.log("🚫 [BACKGROUND] Features disabled, icon set to disconnected");
+      } else {
+        console.log("ℹ️ [BACKGROUND] Features already disabled, no update needed");
+      }
     }
   } catch (err) {
     // Erreur silencieuse si problème réseau ou backend indisponible

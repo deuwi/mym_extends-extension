@@ -631,9 +631,14 @@
         notesEnabled = false;
         stopPolling();
 
-        setTimeout(() => {
-          window.location.reload();
-        }, 500);
+        // Recharger seulement si on est sur mym.fans
+        if (window.location.hostname.includes('mym.fans')) {
+          setTimeout(() => {
+            window.location.reload();
+          }, 500);
+        } else {
+          console.log("ℹ️ [MYM] Features disabled but not on mym.fans, skipping reload");
+        }
       }
 
       if (message.type === "REFRESH_FIREBASE_TOKEN") {
@@ -719,15 +724,26 @@
       ];
 
       const anyFeatureDisabled = featureChanges.some(
-        key => changes[key] && changes[key].newValue === false && changes[key].oldValue === true
+        key => {
+          const change = changes[key];
+          // Vérifier qu'il y a vraiment un changement de true vers false
+          return change && 
+                 change.oldValue === true && 
+                 change.newValue === false;
+        }
       );
 
       if (anyFeatureDisabled) {
         console.log("⚠️ [MYM] Features disabled by background, reloading page...");
-        // Recharger la page pour désactiver les modules
-        setTimeout(() => {
-          window.location.reload();
-        }, 500);
+        console.log("Changes detected:", changes);
+        // Recharger la page seulement si on est sur mym.fans
+        if (window.location.hostname.includes('mym.fans')) {
+          setTimeout(() => {
+            window.location.reload();
+          }, 500);
+        } else {
+          console.log("ℹ️ [MYM] Not on mym.fans, skipping reload");
+        }
       }
     }
   });
