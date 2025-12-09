@@ -539,11 +539,46 @@
     observeNavigation();
   }
 
+  // ========================================
+  // AUTO-REFRESH CONVERSATIONS LIST
+  // ========================================
+  async function refreshConversationsList() {
+    const listContainer = document.querySelector(".mym-conversations-list-content");
+    const searchInput = document.querySelector(".mym-conversation-search input");
+    
+    if (!listContainer) {
+      return; // Liste pas encore injectée
+    }
+
+    // Récupérer la valeur de recherche actuelle
+    const searchQuery = searchInput ? searchInput.value.trim() : "";
+
+    try {
+      // Récupérer les conversations à jour
+      const conversations = await fetchConversationsList(searchQuery);
+      
+      // Re-rendre la liste sans effacer le conteneur principal
+      renderConversationsList(conversations, listContainer, !!searchQuery);
+      
+      // Mettre à jour le compteur dans le titre
+      const title = document.querySelector(".mym-conversations-list > div:nth-child(2)");
+      if (title && !searchQuery) {
+        title.textContent = `Conversations (${conversations.length})`;
+      }
+    } catch (error) {
+      console.error("❌ [MYM Conversations] Error refreshing list:", error);
+    }
+  }
+
+  // Rafraîchir toutes les 30 secondes
+  setInterval(refreshConversationsList, 30000);
+
   // Exposer dans l'API
   contentAPI.conversations = {
     fetchConversationsList,
     injectConversationsInAside,
-    updateConversationsList: injectConversationsInAside, // Alias pour le polling
+    updateConversationsList: refreshConversationsList, // Rafraîchir la liste existante
+    refreshConversationsList,
     removeSidebarFooter,
     init,
   };

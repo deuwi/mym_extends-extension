@@ -554,10 +554,6 @@ async function checkSubscriptionStatusSync() {
   });
 }
 
-// Flag pour éviter les rechargements en boucle
-let lastReloadTimestamp = 0;
-const RELOAD_COOLDOWN = 5000; // 5 secondes minimum entre les rechargements
-
 function disableAllFeatures(iconState = "disconnected") {
   // console.log("🚫 [BACKGROUND] disableAllFeatures called with icon:", iconState);
   chrome.storage.local.get(
@@ -587,28 +583,8 @@ function disableAllFeatures(iconState = "disconnected") {
           // console.log("🚫 Toutes les fonctionnalités désactivées");
           updateExtensionIcon(iconState);
 
-          // 🔄 Recharger uniquement si :
-          // 1. Des fonctionnalités étaient activées avant
-          // 2. Pas de rechargement récent (évite les boucles)
-          const now = Date.now();
-          if (wasAnyEnabled && now - lastReloadTimestamp > RELOAD_COOLDOWN) {
-            lastReloadTimestamp = now;
-            chrome.tabs.query({ url: "*://*.mym.fans/*" }, (tabs) => {
-              if (chrome.runtime.lastError) {
-                console.warn("⚠️ Tab query error:", chrome.runtime.lastError.message);
-                return;
-              }
-              tabs.forEach((tab) => {
-                chrome.tabs.get(tab.id, (existingTab) => {
-                  if (!chrome.runtime.lastError && existingTab) {
-                    chrome.tabs.reload(tab.id);
-                  }
-                });
-              });
-            });
-          } else {
-            // console.log("ℹ️ Rechargement ignoré (cooldown ou déjà désactivé)");
-          }
+          // ⚠️ NE PAS recharger ici - le content.js s'en charge via storage.onChanged
+          // Évite les doubles rechargements
         }
       );
     }
