@@ -395,9 +395,8 @@ async function checkSubscriptionStatus() {
 
         if (!res.ok) {
           if (res.status === 401) {
-            // console.log("⚠️ Réponse HTTP 401 - Token invalide ou expiré");
-            // console.log("🔒 Nettoyage des credentials et déconnexion complète");
-            disableAllFeatures("error"); // Icône rouge pour token invalide
+            // Token invalide ou expiré - SEUL CAS où on désactive
+            disableAllFeatures("error");
             chrome.storage.local.remove([
               "access_token",
               "access_token_stored_at",
@@ -405,9 +404,9 @@ async function checkSubscriptionStatus() {
               "firebaseToken",
               "user_id",
             ]);
-            // L'icône est déjà mise à jour par disableAllFeatures("error")
           }
-          // Pour les autres erreurs (500, 503, etc.), on garde la session
+          // Pour les autres erreurs (500, 503, etc.), on GARDE les features actives
+          // L'utilisateur peut continuer à utiliser l'extension
           return;
         }
 
@@ -455,15 +454,14 @@ async function checkSubscriptionStatus() {
             updateExtensionIcon("connected");
           });
         } else {
-          // Abonnement expiré : GARDER la connexion mais DÉSACTIVER les features
-          disableAllFeatures("error"); // Icône rouge pour abonnement expiré
-
-          // ⚠️ NE PAS supprimer les credentials - l'utilisateur reste connecté
-          // Il pourra voir son statut dans la popup et renouveler son abonnement
+          // Abonnement expiré mais token valide : désactiver les features
+          disableAllFeatures("error");
+          // NE PAS supprimer les credentials - l'utilisateur reste connecté
         }
       } catch (err) {
         console.error("❌ Erreur vérification statut:", err);
-        // En cas d'erreur réseau, on ne désactive pas (pour éviter les faux positifs)
+        // En cas d'erreur réseau/serveur, on GARDE les features actives
+        // L'utilisateur peut continuer à utiliser l'extension
       }
     } // Fin du callback async chrome.storage.local.get
   ); // Fin de chrome.storage.local.get
@@ -503,10 +501,9 @@ async function checkSubscriptionStatusSync() {
           });
 
           if (!res.ok) {
-            // console.log("⚠️ Sync check failed:", res.status);
             if (res.status === 401) {
-              // Token invalide : déconnexion complète
-              disableAllFeatures("error"); // Icône rouge pour token invalide
+              // Token invalide - SEUL CAS où on désactive
+              disableAllFeatures("error");
               chrome.storage.local.remove([
                 "access_token",
                 "access_token_stored_at",
@@ -514,9 +511,11 @@ async function checkSubscriptionStatusSync() {
                 "firebaseToken",
                 "user_id",
               ]);
-              // L'icône est déjà mise à jour par disableAllFeatures("error")
+              resolve(false);
+            } else {
+              // Erreur serveur (500, 503, etc.) - GARDER les features actives
+              resolve(true); // Retourner true pour ne pas bloquer l'utilisateur
             }
-            resolve(false);
             return;
           }
 
@@ -547,7 +546,8 @@ async function checkSubscriptionStatusSync() {
           }
         } catch (err) {
           console.error("❌ Erreur vérification statut sync:", err);
-          resolve(false);
+          // En cas d'erreur réseau, retourner true pour GARDER les features actives
+          resolve(true);
         }
       }
     );
@@ -691,10 +691,6 @@ async function checkAndEnableFeatures() {
     });
 
     if (!res.ok) {
-      console.warn(
-        `⚠️ Réponse HTTP ${res.status} lors de la vérification de la licence`
-      );
-
       // Si token expiré (401), déconnecter l'utilisateur
       if (res.status === 401) {
         console.warn("🔒 Token expiré - nettoyage des credentials");
@@ -714,8 +710,9 @@ async function checkAndEnableFeatures() {
           mym_notes_enabled: false,
         };
         await chrome.storage.local.set(allDisabled);
-        updateExtensionIcon("error"); // Icône rouge pour token expiré
+        updateExtensionIcon("error");
       }
+      // Pour les autres erreurs (500, 503, etc.), GARDER les features actives
       return;
     }
 
@@ -791,15 +788,15 @@ async function checkAndEnableFeatures() {
       }
     }
   } catch (err) {
-    // Erreur silencieuse si problème réseau ou backend indisponible
+    // En cas d'erreur réseau/serveur, GARDER les features actives
     // L'extension continue de fonctionner avec les paramètres actuels
     if (err.message && err.message.includes("Failed to fetch")) {
       console.log(
-        "ℹ️  Backend temporairement indisponible - conservation des paramètres actuels"
+        "ℹ️  Backend temporairement indisponible - conservation des features actuelles"
       );
     } else {
       console.error(
-        "❌ Erreur lors de la vérification de la licence agence:",
+        "❌ Erreur lors de la vérification de la licence:",
         err
       );
     }
