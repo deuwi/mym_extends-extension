@@ -1214,10 +1214,19 @@
     // Envoyer le thème au content script pour l'appliquer sur la page
     chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
       if (tabs[0]) {
-        chrome.tabs.sendMessage(tabs[0].id, {
-          action: "applyTheme",
-          theme: theme,
-        });
+        // Vérifier que l'onglet est une page web valide (pas chrome://, about:, etc.)
+        const url = tabs[0].url || "";
+        if (url.startsWith("http://") || url.startsWith("https://")) {
+          chrome.tabs.sendMessage(tabs[0].id, {
+            action: "applyTheme",
+            theme: theme,
+          }, (response) => {
+            // Ignorer l'erreur si le content script n'est pas chargé
+            if (chrome.runtime.lastError) {
+              console.log("Content script not loaded on this page:", chrome.runtime.lastError.message);
+            }
+          });
+        }
       }
     });
   }
