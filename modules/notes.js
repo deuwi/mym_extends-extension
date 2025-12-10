@@ -20,7 +20,7 @@
     //   `📝 [MYM Notes] Found ${userRows.length} user rows on /app/myms`
     // );
 
-    listRows.forEach((row) => {
+    userRows.forEach((row) => {
       const rightSection = row.querySelector(".list__row__right");
       if (!rightSection) return;
 
