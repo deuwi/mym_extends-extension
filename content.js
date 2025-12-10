@@ -858,6 +858,16 @@
 
     const theme = THEMES[themeName] || THEMES.default;
     applyThemeToPage(theme);
+    
+    // Synchroniser immédiatement avec le localStorage du frontend
+    if (window.location.hostname === 'mymchat.fr' || window.location.hostname === 'localhost') {
+      try {
+        window.localStorage.setItem("user_theme", themeName);
+        console.log(`🎨 [MYM] Thème "${themeName}" synchronisé avec le frontend`);
+      } catch (e) {
+        console.error("Erreur lors de la synchronisation initiale du thème:", e);
+      }
+    }
   });
 
   // ========================================
