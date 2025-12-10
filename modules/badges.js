@@ -222,7 +222,7 @@
       badge.className = "mym-total-spent-badge";
       badge.style.cssText = `
         display: inline-block;
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        background: ${getComputedStyle(document.documentElement).getPropertyValue('--mym-theme-gradient').trim() || 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)'};
         color: white;
         padding: 4px 8px;
         border-radius: 12px;
