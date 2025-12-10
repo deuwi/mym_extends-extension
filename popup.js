@@ -790,6 +790,29 @@
         // Activer ou désactiver
         chrome.storage.local.set({ [storageKey]: newVal }, () => {
           renderToggle(element, newVal);
+          
+          // 🔄 Notifier le content script pour appliquer les changements immédiatement
+          chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+            if (tabs[0]) {
+              const url = tabs[0].url || "";
+              if (url.startsWith("http://") || url.startsWith("https://")) {
+                chrome.tabs.sendMessage(
+                  tabs[0].id,
+                  {
+                    action: "toggleFeature",
+                    feature: storageKey,
+                    enabled: newVal
+                  },
+                  (response) => {
+                    if (chrome.runtime.lastError) {
+                      // Content script non chargé, le changement sera appliqué au prochain chargement
+                      console.log("Content script not loaded:", chrome.runtime.lastError.message);
+                    }
+                  }
+                );
+              }
+            }
+          });
         });
       });
     });

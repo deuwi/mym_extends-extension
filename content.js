@@ -677,9 +677,91 @@
         // Appliquer le thème sur la page
         applyThemeToPage(message.theme);
       }
+
+      if (message.action === "toggleFeature") {
+        // Gérer l'activation/désactivation d'une fonctionnalité
+        handleFeatureToggle(message.feature, message.enabled);
+      }
     };
 
     chrome.runtime.onMessage.addListener(messageListener);
+  }
+
+  // ========================================
+  // FEATURE TOGGLE HANDLER
+  // ========================================
+  function handleFeatureToggle(feature, enabled) {
+    // // // // console.log(`🔄 [MYM] Feature toggle: ${feature} = ${enabled}`);
+
+    switch (feature) {
+      case "mym_badges_enabled":
+        if (enabled) {
+          // Activer les badges
+          if (contentAPI.badges && contentAPI.badges.scanExistingListsForBadges) {
+            contentAPI.badges.scanExistingListsForBadges();
+          }
+        } else {
+          // Désactiver les badges (supprimer tous les badges affichés)
+          document.querySelectorAll('.revenue-badge, [class*="revenue-badge"]').forEach(el => el.remove());
+        }
+        break;
+
+      case "mym_stats_enabled":
+        if (enabled) {
+          // Activer la box stats
+          const username = contentAPI.getCurrentConversationUsername();
+          if (username && contentAPI.stats && contentAPI.stats.injectUserInfoBox) {
+            contentAPI.stats.injectUserInfoBox(username);
+          }
+        } else {
+          // Désactiver la box stats
+          const statsBox = document.querySelector('.mym-user-info-box');
+          if (statsBox) statsBox.remove();
+        }
+        break;
+
+      case "mym_emoji_enabled":
+        if (enabled) {
+          // Activer le picker emoji
+          if (contentAPI.emoji && contentAPI.emoji.scanAndAttachPickers) {
+            contentAPI.emoji.scanAndAttachPickers();
+          }
+        } else {
+          // Désactiver le picker emoji
+          document.querySelectorAll('.mym-emoji-trigger').forEach(el => el.remove());
+          const picker = document.querySelector('.mym-emoji-picker');
+          if (picker) picker.remove();
+        }
+        break;
+
+      case "mym_notes_enabled":
+        if (enabled) {
+          // Activer les notes
+          if (contentAPI.notes && contentAPI.notes.createNotesButton) {
+            contentAPI.notes.createNotesButton();
+          }
+        } else {
+          // Désactiver les notes
+          const notesBtn = document.querySelector('.mym-notes-button');
+          if (notesBtn) notesBtn.remove();
+          const notesPanel = document.querySelector('.mym-notes-panel');
+          if (notesPanel) notesPanel.remove();
+        }
+        break;
+
+      case "mym_live_enabled":
+        if (enabled) {
+          // Redémarrer le polling
+          startPollingIfNeeded();
+        } else {
+          // Arrêter le polling
+          stopPolling();
+        }
+        break;
+
+      default:
+        // // // // console.log(`⚠️ [MYM] Unknown feature: ${feature}`);
+    }
   }
 
   // ========================================
