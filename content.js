@@ -737,6 +737,26 @@
 
     console.log(`🎨 [MYM] Thème "${theme.name}" appliqué`);
     
+    // Synchroniser avec le localStorage de la page pour le frontend React
+    if (window.location.hostname === 'mymchat.fr' || window.location.hostname === 'localhost') {
+      // Obtenir le nom du thème depuis chrome.storage
+      chrome.storage.local.get(["user_theme"], (data) => {
+        const themeName = data.user_theme || "default";
+        // Injecter dans le localStorage de la page
+        try {
+          window.localStorage.setItem("user_theme", themeName);
+          // Déclencher un événement storage pour que React détecte le changement
+          window.dispatchEvent(new StorageEvent('storage', {
+            key: 'user_theme',
+            newValue: themeName,
+            url: window.location.href
+          }));
+        } catch (e) {
+          console.error("Erreur lors de la synchronisation du thème:", e);
+        }
+      });
+    }
+    
     // Mettre à jour les éléments existants avec styles inline
     updateExistingElementsWithTheme(theme);
   }
