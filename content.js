@@ -702,7 +702,7 @@
           }
         } else {
           // Désactiver les badges (supprimer tous les badges affichés)
-          document.querySelectorAll('.revenue-badge, [class*="revenue-badge"]').forEach(el => el.remove());
+          document.querySelectorAll('.mym-total-spent-badge, .mym-category-badge').forEach(el => el.remove());
         }
         break;
 
