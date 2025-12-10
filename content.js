@@ -736,6 +736,62 @@
     `;
 
     console.log(`🎨 [MYM] Thème "${theme.name}" appliqué`);
+    
+    // Mettre à jour les éléments existants avec styles inline
+    updateExistingElementsWithTheme(theme);
+  }
+
+  // Mettre à jour les éléments déjà créés avec le nouveau thème
+  function updateExistingElementsWithTheme(theme) {
+    const gradient = theme.gradient;
+    
+    // Mettre à jour la box de stats
+    const userInfoBox = document.getElementById("mym-user-info-box");
+    if (userInfoBox) {
+      userInfoBox.style.background = gradient;
+    }
+    
+    // Mettre à jour le bouton emoji
+    const emojiButton = document.querySelector(".mym-emoji-trigger");
+    if (emojiButton) {
+      emojiButton.style.background = gradient;
+    }
+    
+    // Mettre à jour le picker emoji
+    const emojiPicker = document.getElementById("mym-emoji-picker");
+    if (emojiPicker) {
+      emojiPicker.style.background = gradient;
+    }
+    
+    // Mettre à jour la section fréquents du picker
+    const frequentSection = document.getElementById("mym-frequent-emojis");
+    if (frequentSection) {
+      frequentSection.style.background = gradient;
+    }
+    
+    // Mettre à jour le panneau notes
+    const notesPanel = document.getElementById("mym-notes-panel");
+    if (notesPanel) {
+      notesPanel.style.background = gradient;
+    }
+    
+    // Mettre à jour tous les boutons notes
+    const noteButtons = document.querySelectorAll("#mym-notes-button");
+    noteButtons.forEach(button => {
+      button.style.background = gradient;
+    });
+    
+    // Mettre à jour l'éditeur de notes (modal)
+    const notesEditor = document.querySelector(".mym-notes-editor");
+    if (notesEditor) {
+      notesEditor.style.background = gradient;
+    }
+    
+    // Mettre à jour le badge de revenu total
+    const totalSpentBadge = document.querySelector(".mym-total-spent-badge");
+    if (totalSpentBadge) {
+      totalSpentBadge.style.background = gradient;
+    }
   }
 
   // Charger et appliquer le thème au chargement
