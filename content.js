@@ -695,6 +695,9 @@
 
     switch (feature) {
       case "mym_badges_enabled":
+        // Mettre à jour le flag dans l'API
+        contentAPI.badgesEnabled = enabled;
+        
         if (enabled) {
           // Activer les badges
           if (contentAPI.badges && contentAPI.badges.scanExistingListsForBadges) {
@@ -707,6 +710,9 @@
         break;
 
       case "mym_stats_enabled":
+        // Mettre à jour le flag dans l'API
+        contentAPI.statsEnabled = enabled;
+        
         if (enabled) {
           // Activer la box stats
           const username = contentAPI.getCurrentConversationUsername();
@@ -721,6 +727,9 @@
         break;
 
       case "mym_emoji_enabled":
+        // Mettre à jour le flag dans l'API
+        contentAPI.emojiEnabled = enabled;
+        
         if (enabled) {
           // Activer le picker emoji
           if (contentAPI.emoji && contentAPI.emoji.scanAndAttachPickers) {
@@ -735,6 +744,9 @@
         break;
 
       case "mym_notes_enabled":
+        // Mettre à jour le flag dans l'API
+        contentAPI.notesEnabled = enabled;
+        
         if (enabled) {
           // Activer les notes
           if (contentAPI.notes && contentAPI.notes.createNotesButton) {
