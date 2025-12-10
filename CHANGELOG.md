@@ -2,26 +2,6 @@
 
 ## Version 2.0.2 - 8 décembre 2024
 
-### ✨ Nouvelles fonctionnalités
-
-#### Ad Blocker - Blocage des publicités 🚫
-
-- **NOUVEAU** : Module automatique de blocage des bannières publicitaires
-- **Fonctionnalités** :
-  - ✅ Suppression automatique des publicités sur les pages de discussion
-  - ✅ Détection en temps réel des pubs injectées dynamiquement
-  - ✅ Masquage CSS immédiat (aucun flash visuel)
-  - ✅ MutationObserver pour détecter les nouvelles pubs
-  - ✅ Vérification périodique toutes les 5 secondes
-- **Éléments bloqués** :
-  - Bannières `<details class="ad-banner">`
-  - Tous les éléments avec classe contenant "ad-banner"
-  - Éléments avec ID contenant "advertisement"
-- **Impact** : Expérience de navigation plus propre, sans distractions publicitaires
-- **Fichiers** :
-  - `modules/ad-blocker.js` - Module JavaScript
-  - `styles/ad-blocker.css` - Styles de masquage
-
 ### 🔧 Améliorations de la qualité de code
 
 #### Outils de linting et formatage

@@ -35,9 +35,8 @@ extension/
 ├── popup.js (1,101 lignes) - Interface utilisateur popup
 ├── auth-bridge.js (130 lignes) - Pont authentification
 ├── config.js (105 lignes) - Configuration centralisée
-├── ad-blocker-early.js (97 lignes) - Bloqueur de pubs
 │
-├── modules/ (12 modules)
+├── modules/ (11 modules)
 │   ├── core.js (332 lignes) - API commune
 │   ├── badges.js (514 lignes) - Badges de revenus
 │   ├── emoji.js (1,273 lignes) - Picker avec 947 emojis
@@ -47,8 +46,7 @@ extension/
 │   ├── auto-polling.js (249 lignes) - Rafraîchissement auto
 │   ├── api.js (151 lignes) - Client API backend
 │   ├── keyboard-shortcuts.js (119 lignes) - Raccourcis clavier
-│   ├── sidebar-toggle.js (210 lignes) - Gestion sidebar
-│   ├── myms-clickable-rows.js (118 lignes) - Lignes cliquables
+│   └── sidebar-toggle.js (210 lignes) - Gestion sidebar
 │   └── ad-blocker.js (235 lignes) - Bloqueur avancé
 │
 ├── styles/ - CSS pour les modules
@@ -159,16 +157,6 @@ extension/
 **Fichiers:** `keyboard-shortcuts.js` (119 lignes)
 
 ---
-
-### 8. **Ad Blocker** 🚫
-- **Injection:** document_start (ultra précoce)
-- **CSS:** Masquage des pubs
-- **JavaScript:** Suppression dynamique
-- **Ciblage:** Banners, popups, overlays
-- **Performance:** Minimal impact
-
-**Fichiers:** `ad-blocker-early.js`, `ad-blocker.js`
-
 ---
 
 ## 🔐 Authentification & Sécurité

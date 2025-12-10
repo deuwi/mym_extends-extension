@@ -24,7 +24,6 @@
 | **auth-bridge.js** | 112 | Communication site web ↔ extension |
 | **config.js** | 91 | Configuration centralisée |
 | **minify.js** | 97 | Script de minification pour builds |
-| **ad-blocker-early.js** | 97 | Bloqueur de pubs (injection précoce) |
 
 ### Répartition par Module
 
@@ -37,13 +36,12 @@
 | **core.js** | 345 | Utilitaires partagés (LRU cache, storage, helpers) |
 | **stats.js** | 287 | Statistiques revenus détaillées |
 | **auto-polling.js** | 249 | Rafraîchissement automatique messages |
-| **ad-blocker.js** | 235 | Bloqueur de pubs avancé |
 | **sidebar-toggle.js** | 210 | Gestion sidebar responsive |
 | **api.js** | 151 | Client API backend (fetch avec retry) |
 | **keyboard-shortcuts.js** | 119 | Raccourcis clavier (Ctrl+Enter) |
 | **myms-clickable-rows.js** | 118 | Lignes cliquables page MyMs |
 
-**Total modules:** 4,835 lignes
+**Total modules:** 4,600 lignes
 
 ---
 
@@ -68,13 +66,10 @@
 }
 ```
 
-### Injection en 2 Phases
-1. **document_start** (CSS only):
-   - `ad-blocker-early.js` - Bloque les pubs avant chargement DOM
-
-2. **document_idle** (Scripts principaux):
+### Injection en 1 Phase
+1. **document_idle** (Scripts principaux):
    - `config.js` - Configuration globale
-   - 10 modules fonctionnels
+   - 11 modules fonctionnels
    - `content.js` - Orchestrateur
 
 ### Architecture Modulaire
@@ -137,15 +132,6 @@
 - **Injection CSS précoce** (document_start)
 - **Détection dynamique** via MutationObserver
 - **Nettoyage périodique** toutes les 5 secondes
-- **Stats bloquage** disponibles
-
-**Fichiers:** `ad-blocker-early.js`, `ad-blocker.js`
-
-### 7. ⌨️ Raccourcis Clavier
-- **Ctrl+Enter** pour envoyer message
-- **Tooltip hover** "Ctrl+Enter to send"
-- **Observer dynamique** pour nouveaux inputs
-
 **Fichiers:** `keyboard-shortcuts.js`
 
 ### 8. 📱 Sidebar Responsive
@@ -171,7 +157,6 @@ L'extension utilise **15+ MutationObservers** pour détecter les changements DOM
 | Footer observer | conversations-list.js | `aside.sidebar` | Retirer footer sidebar si réapparu |
 | Input observer | keyboard-shortcuts.js | `document.body` | Ajouter Ctrl+Enter aux nouveaux inputs |
 | Navigation observer | auto-polling.js | `document.body` | Redémarrer polling si page change |
-| Ad blocker observer | ad-blocker.js | `document.body` | Bloquer nouvelles pubs dynamiques |
 | Sidebar observer | sidebar-toggle.js | `document.body` | Détecter changements viewport |
 | Row observer | myms-clickable-rows.js | `document.body` | Rendre nouvelles lignes cliquables |
 
@@ -190,12 +175,11 @@ L'extension utilise **15+ MutationObservers** pour détecter les changements DOM
 
 ### setInterval()
 | Interval | Fichier | Intervalle | Action |
-|----------|---------|-----------|---------|
+|----------|---------|-----------|--------|
 | Polling messages | auto-polling.js | 10-30s | Récupérer nouveaux messages |
 | Polling conversations | auto-polling.js | 30s | Rafraîchir liste conversations sidebar |
 | Refresh conversations | conversations-list.js | 30s | Rafraîchir liste complète |
 | Check rows clickable | myms-clickable-rows.js | Variable | Vérifier lignes cliquables page MyMs |
-| Ad blocker periodic | ad-blocker.js | 5s | Nettoyage pubs |
 | Subscription monitoring | content.js | 30 min | Afficher bannière si abonnement expiré |
 
 ### setTimeout()
@@ -354,9 +338,7 @@ L'extension utilise **15+ MutationObservers** pour détecter les changements DOM
 - `NOTES_SYNC.md` - Documentation sync notes
 - `docs/CODE_QUALITY.md` (196 lignes) - Outils qualité
 - `docs/MIGRATION_LOGS.md` - Migration logs
-- `docs/TEST_AD_BLOCKER.md` - Tests bloqueur pubs
 - `modules/README.md` - Architecture modules
-- `modules/README-ad-blocker.md` - Doc ad-blocker
 
 ---
 
