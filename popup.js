@@ -768,21 +768,26 @@
     if (!element) return;
 
     element.addEventListener("click", async () => {
-      // 🔒 Vérifier d'abord le statut de l'abonnement
-      const canActivate = await checkSubscriptionBeforeToggle();
-      if (!canActivate) {
-        showStatus(
-          "⚠️ Accès Premium requis. Souscrivez un abonnement ou activez une licence agence.",
-          "error"
-        );
-        setTimeout(hideStatus, 5000);
-        return;
-      }
-
-      chrome.storage.local.get([storageKey], (data) => {
+      // Récupérer la valeur actuelle pour savoir si on active ou désactive
+      chrome.storage.local.get([storageKey], async (data) => {
         const safeData = data || {};
         const currentVal = safeData[storageKey] ?? false;
         const newVal = !currentVal;
+
+        // 🔒 Vérifier l'abonnement UNIQUEMENT si on veut ACTIVER
+        if (newVal) {
+          const canActivate = await checkSubscriptionBeforeToggle();
+          if (!canActivate) {
+            showStatus(
+              "⚠️ Accès Premium requis. Souscrivez un abonnement ou activez une licence agence.",
+              "error"
+            );
+            setTimeout(hideStatus, 5000);
+            return;
+          }
+        }
+
+        // Activer ou désactiver
         chrome.storage.local.set({ [storageKey]: newVal }, () => {
           renderToggle(element, newVal);
         });
