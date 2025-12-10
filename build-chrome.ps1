@@ -21,6 +21,7 @@ $filesToCopy = @(
     "popup.css",
     "auth-bridge.js",
     "detector.js",
+    "theme-sync.js",
     "manifest.json"
 )
 

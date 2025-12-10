@@ -58,6 +58,13 @@
       ],
       "js": ["config.js", "auth-bridge.js"],
       "run_at": "document_idle"
+    },
+    {
+      "matches": [
+        "https://mymchat.fr/*"
+      ],
+      "js": ["theme-sync.js"],
+      "run_at": "document_start"
     }
   ]
 }
