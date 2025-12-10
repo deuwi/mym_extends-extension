@@ -581,9 +581,21 @@ function disableAllFeatures(iconState = "disconnected") {
       "mym_stats_enabled",
       "mym_emoji_enabled",
       "mym_notes_enabled",
+      "user_manual_toggle_timestamp", // Timestamp du dernier toggle manuel
     ],
     (currentState) => {
       const safeState = currentState || {};
+      
+      // 🚫 NOUVEAU: Ne pas désactiver si l'utilisateur vient de toggle manuellement (< 2 secondes)
+      const manualToggleTimestamp = safeState.user_manual_toggle_timestamp || 0;
+      const timeSinceManualToggle = Date.now() - manualToggleTimestamp;
+      
+      if (timeSinceManualToggle < 2000) {
+        console.log("⏸️ [BACKGROUND] Ignoring disableAllFeatures - user just toggled manually");
+        updateExtensionIcon(iconState);
+        return;
+      }
+      
       // console.log("📊 [BACKGROUND] Current features state:", safeState);
       const wasAnyEnabled = Object.values(safeState).some(
         (val) => val === true

@@ -788,7 +788,10 @@
         }
 
         // Activer ou désactiver
-        chrome.storage.local.set({ [storageKey]: newVal }, () => {
+        chrome.storage.local.set({ 
+          [storageKey]: newVal,
+          user_manual_toggle_timestamp: Date.now() // Marquer le toggle manuel
+        }, () => {
           renderToggle(element, newVal);
           
           // 🔄 Notifier le content script pour appliquer les changements immédiatement
