@@ -687,25 +687,28 @@
         const cookieDomains = ["mymchat.fr", ".mymchat.fr"];
         let totalCookiesRemoved = 0;
 
-        cookieDomains.forEach((domain) => {
-          chrome.cookies.getAll({ domain: domain }, (cookies) => {
-            cookies.forEach((cookie) => {
-              const url = `https://mymchat.fr${cookie.path}`;
-              chrome.cookies.remove(
-                {
-                  url: url,
-                  name: cookie.name,
-                },
-                (details) => {
-                  if (details) {
-                    totalCookiesRemoved++;
-                    // console.log(`🍪 Cookie supprimé: ${cookie.name}`);
+        if (chrome.cookies && chrome.cookies.getAll) {
+          cookieDomains.forEach((domain) => {
+            chrome.cookies.getAll({ domain: domain }, (cookies) => {
+              const safeCookies = cookies || [];
+              safeCookies.forEach((cookie) => {
+                const url = `https://mymchat.fr${cookie.path}`;
+                chrome.cookies.remove(
+                  {
+                    url: url,
+                    name: cookie.name,
+                  },
+                  (details) => {
+                    if (details) {
+                      totalCookiesRemoved++;
+                      // console.log(`🍪 Cookie supprimé: ${cookie.name}`);
+                    }
                   }
-                }
-              );
+                );
+              });
             });
           });
-        });
+        }
 
         setTimeout(() => {
           // console.log(`🍪 Total: ${totalCookiesRemoved} cookie(s) mymchat.fr supprimé(s)`);
