@@ -1180,6 +1180,19 @@
         el.style.background = theme.gradient;
       } else if (el.classList.contains("pricing-link")) {
         el.style.background = theme.gradient;
+      } else if (el.tagName === "H1") {
+        // Pour le h1, utiliser du texte blanc avec le thème sombre
+        if (themeName === "dark") {
+          el.style.background = "none";
+          el.style.webkitTextFillColor = "#ffffff";
+          el.style.color = "#ffffff";
+        } else {
+          el.style.background = theme.gradient;
+          el.style.webkitBackgroundClip = "text";
+          el.style.backgroundClip = "text";
+          el.style.webkitTextFillColor = "transparent";
+          el.style.color = "transparent";
+        }
       } else {
         el.style.background = theme.gradient;
         el.style.webkitBackgroundClip = "text";
