@@ -29,6 +29,83 @@
   API.emojiEnabled = true;
   API.notesEnabled = true;
 
+  // ========================================
+  // SHARED UTILITIES
+  // ========================================
+
+  /**
+   * Debounce utility to limit function execution frequency
+   * Shared across all modules to avoid code duplication
+   * @param {Function} func - Function to debounce
+   * @param {number} wait - Delay in milliseconds
+   * @returns {Function} Debounced function
+   */
+  API.debounce = function(func, wait) {
+    let timeout;
+    return function executedFunction(...args) {
+      const later = () => {
+        clearTimeout(timeout);
+        func(...args);
+      };
+      clearTimeout(timeout);
+      timeout = setTimeout(later, wait);
+    };
+  };
+
+  /**
+   * Common DOM selectors used across modules
+   * Centralized to maintain consistency and reduce duplication
+   */
+  API.SELECTORS = {
+    // Chat page selectors
+    CHAT_HEADER: '.chat-header',
+    CHAT_CONTAINER: '.chat',
+    CHAT_INPUT: '.chat-input__input textarea',
+    INPUT_FIELD: '.input__field',
+    
+    // List selectors
+    LIST_ROW: '.list__row',
+    LIST_ROW_LEFT: '.list__row__left',
+    LIST_ROW_LEFT_BACK: '.list__row__left__back',
+    
+    // Discussions selectors
+    DISCUSSIONS: '.discussions',
+    DISCUSSIONS_CHATS: '.discussions__chats',
+    DISCUSSIONS_CHAT: '.discussions__chat',
+    
+    // Sidebar selectors
+    SIDEBAR: 'aside.sidebar',
+    SIDEBAR_FOOTER: '.sidebar__footer',
+    SIDEBAR_FOOTER_LIST: '.sidebar__footer__list',
+    
+    // Page selectors
+    PAGE_MY_MYMS: '.page.my-myms',
+    
+    // Combined selectors
+    LIST_CONTAINERS: '.discussions__chats, .sidebar__footer__list',
+    CHAT_PAGES: '.discussions, .page.my-myms, .sidebar__footer__list',
+  };
+
+  /**
+   * Inject CSS styles into the page
+   * Prevents duplicate style injection and provides consistent API
+   * @param {string} styleId - Unique ID for the style element
+   * @param {string} cssContent - CSS content to inject
+   * @returns {HTMLStyleElement} The injected style element or null if already exists
+   */
+  API.injectStyles = function(styleId, cssContent) {
+    // Check if style already exists
+    if (document.getElementById(styleId)) {
+      return null;
+    }
+
+    const style = document.createElement("style");
+    style.id = styleId;
+    style.textContent = cssContent;
+    document.head.appendChild(style);
+    return style;
+  };
+
   /**
    * LRU Cache implementation
    */

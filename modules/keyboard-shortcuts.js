@@ -13,6 +13,9 @@
 
   let setupTextareas = new Set();
 
+  // Use shared utilities from API
+  const debounce = contentAPI.debounce;
+
   // ========================================
   // SETUP CTRL+ENTER SHORTCUT
   // ========================================
@@ -84,22 +87,18 @@
   // OBSERVER FOR NEW INPUTS
   // ========================================
   let inputObserver = null;
-  let inputObserverTimeout = null;
 
   function observeNewInputs() {
     if (inputObserver) return;
 
-    inputObserver = new MutationObserver(() => {
-      if (inputObserverTimeout) return;
-      inputObserverTimeout = setTimeout(() => {
-        setupCtrlEnterShortcut();
-        inputObserverTimeout = null;
-      }, 500); // Throttle 500ms
-    });
+    // Use debounce instead of manual timeout
+    const debouncedSetup = debounce(setupCtrlEnterShortcut, 300);
+    
+    inputObserver = new MutationObserver(debouncedSetup);
 
     inputObserver.observe(document.body, {
       childList: true,
-      subtree: true,
+      subtree: false, // Limit to direct children for performance
     });
   }
 

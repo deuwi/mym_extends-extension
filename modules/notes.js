@@ -5,6 +5,10 @@
   let currentChatIdForNotes = null;
   let notesAutoSaveTimeout = null;
 
+  // Use shared utilities from API
+  const debounce = contentAPI.debounce;
+  const SELECTORS = contentAPI.SELECTORS;
+
   /**
    * Inject notes button in user list rows on /app/myms page
    */
@@ -43,8 +47,7 @@
         "button button--icon button--secondary list__row__right__no-border mym-notes-button";
       notesBtn.type = "button";
       notesBtn.title = `Ouvrir les notes pour ${username}`;
-      notesBtn.innerHTML =
-        '<span class="button__icon" style="font-size: 20px;">📝</span>';
+      notesBtn.textContent = "📝";
 
       notesBtn.onclick = (e) => {
         e.preventDefault();
@@ -686,7 +689,7 @@
         transition: all 0.2s;
         margin-right: 8px;
       `;
-      button.innerHTML = `📝`;
+      button.textContent = "📝";
 
       button.addEventListener("mouseenter", () => {
         button.style.transform = "scale(1.1)";
@@ -827,27 +830,29 @@
       return;
     }
 
-    // Observer to add notes button to chat header
-    const observer = new MutationObserver(() => {
+    // Observer to add notes button to chat header with debounce
+    const checkNotesButton = debounce(() => {
       // Don't observe on /app/myms (handled separately)
       if (window.location.pathname === "/app/myms") {
         injectNotesButtonsInList();
         return;
       }
 
-      const chatHeader = document.querySelector(".chat-header");
+      const chatHeader = document.querySelector(SELECTORS.CHAT_HEADER);
       if (chatHeader && !chatHeader.querySelector("#mym-notes-button")) {
         createNotesButton();
       }
-    });
+    }, 200);
+
+    const observer = new MutationObserver(checkNotesButton);
 
     observer.observe(document.body, {
       childList: true,
-      subtree: true,
+      subtree: false, // Limit to direct children for performance
     });
 
     // Initial check
-    const chatHeader = document.querySelector(".chat-header");
+    const chatHeader = document.querySelector(SELECTORS.CHAT_HEADER);
     if (chatHeader) {
       createNotesButton();
     }

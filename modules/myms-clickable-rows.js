@@ -6,24 +6,43 @@
 (function () {
   "use strict";
 
+  // Access API utilities
+  const contentAPI = window.MYM_CONTENT_API || {};
+  const debounce = contentAPI.debounce || function(f, w) { return f; }; // Fallback
+  const SELECTORS = contentAPI.SELECTORS || {};
+
   // ========================================
   // INJECT CSS FOR POINTER CURSOR
   // ========================================
   function injectStyles() {
-    if (document.getElementById("mym-clickable-rows-style")) return;
-
-    const style = document.createElement("style");
-    style.id = "mym-clickable-rows-style";
-    style.textContent = `
-      .page.my-myms .list__row {
-        cursor: pointer !important;
-      }
-      .page.my-myms .list__row button,
-      .page.my-myms .list__row a {
-        cursor: pointer !important;
-      }
-    `;
-    document.head.appendChild(style);
+    // Use shared injectStyles utility if available
+    if (contentAPI.injectStyles) {
+      contentAPI.injectStyles("mym-clickable-rows-style", `
+        .page.my-myms .list__row {
+          cursor: pointer !important;
+        }
+        .page.my-myms .list__row button,
+        .page.my-myms .list__row a {
+          cursor: pointer !important;
+        }
+      `);
+    } else {
+      // Fallback for standalone usage
+      if (document.getElementById("mym-clickable-rows-style")) return;
+      
+      const style = document.createElement("style");
+      style.id = "mym-clickable-rows-style";
+      style.textContent = `
+        .page.my-myms .list__row {
+          cursor: pointer !important;
+        }
+        .page.my-myms .list__row button,
+        .page.my-myms .list__row a {
+          cursor: pointer !important;
+        }
+      `;
+      document.head.appendChild(style);
+    }
   }
 
   // ========================================
@@ -68,6 +87,9 @@
   // OBSERVE DOM CHANGES
   // ========================================
   function observeNewRows() {
+    // Debounced scan to batch rapid DOM changes
+    const debouncedScan = debounce(scanAndMakeRowsClickable, 200);
+
     const observer = new MutationObserver((mutations) => {
       let needsScan = false;
 
@@ -84,13 +106,15 @@
       });
 
       if (needsScan) {
-        scanAndMakeRowsClickable();
+        debouncedScan();
       }
     });
 
-    observer.observe(document.body, {
+    // Observe page container instead of entire body for better performance
+    const pageContainer = document.querySelector(".page.my-myms") || document.body;
+    observer.observe(pageContainer, {
       childList: true,
-      subtree: true,
+      subtree: true, // Required to catch nested list rows
     });
 
     return observer;

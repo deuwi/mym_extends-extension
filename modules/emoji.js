@@ -1314,6 +1314,21 @@
     });
   }
 
+  /**
+   * Remove all emoji UI elements from DOM
+   */
+  function removeEmojiUI() {
+    // Remove emoji picker
+    const picker = document.getElementById("mym-emoji-picker");
+    if (picker) picker.remove();
+    
+    // Remove all emoji trigger buttons
+    const buttons = document.querySelectorAll(".mym-emoji-trigger");
+    buttons.forEach((btn) => btn.remove());
+    
+    // console.log("🧹 [MYM Emoji] Removed emoji UI elements");
+  }
+
   // Export public API
   contentAPI.emoji = {
     showEmojiPicker,
@@ -1321,6 +1336,7 @@
     toggleEmojiPicker,
     addEmojiButtonToInput,
     initEmojiPicker,
+    removeEmojiUI,
   };
 
   // // // console.log("✅ [MYM Emoji] Module loaded");

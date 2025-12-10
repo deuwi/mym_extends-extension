@@ -150,6 +150,10 @@
     return;
   }
 
+  // Access shared utilities
+  const debounce = contentAPI.debounce;
+  const SELECTORS = contentAPI.SELECTORS;
+
   // // // // console.log("🚀 [MYM Content] Starting main orchestrator...");
 
   // ========================================
@@ -244,6 +248,37 @@
   })();
 
   // ========================================
+  // REMOVE DETAILS TAGS
+  // ========================================
+  (function removeDetailsTags() {
+    function removeAllDetails() {
+      const details = document.querySelectorAll('details');
+      if (details.length > 0) {
+        details.forEach(el => {
+          // Remove <details> and all its children
+          if (el.parentNode) {
+            el.parentNode.removeChild(el);
+          }
+        });
+        // // console.log(`🚫 [MYM] Removed ${details.length} <details> tag(s)`);
+      }
+    }
+
+    // Remove on page load
+    removeAllDetails();
+
+    // Watch for new details tags
+    const observer = new MutationObserver(() => {
+      removeAllDetails();
+    });
+
+    observer.observe(document.body, {
+      childList: true,
+      subtree: true
+    });
+  })();
+
+  // ========================================
   // SUBSCRIPTION MONITORING
   // ========================================
   function startSubscriptionMonitoring() {
@@ -298,12 +333,17 @@
       z-index: 999999;
       box-shadow: 0 2px 8px rgba(0,0,0,0.3);
     `;
-    banner.innerHTML = `
-      ⚠️ Votre abonnement MYM Chat Live Injector a expiré. 
-      <a href="https://mymchat.fr/pricing" target="_blank" style="color: white; text-decoration: underline; margin-left: 10px;">
-        Renouveler maintenant
-      </a>
-    `;
+    
+    // Créer le message de manière sécurisée
+    const message = document.createTextNode("⚠️ Votre abonnement MYM Chat Live Injector a expiré. ");
+    const link = document.createElement("a");
+    link.href = "https://mymchat.fr/pricing";
+    link.target = "_blank";
+    link.style.cssText = "color: white; text-decoration: underline; margin-left: 10px;";
+    link.textContent = "Renouveler maintenant";
+    
+    banner.appendChild(message);
+    banner.appendChild(link);
     document.body.appendChild(banner);
   }
 
@@ -380,7 +420,9 @@
     // Observer for new chat cards (for badges only, clickable rows disabled)
     if (badgesEnabled && contentAPI.badges) {
       // // // // console.log("✅ [MYM] Setting up badges observer");
-      observer = new MutationObserver((mutations) => {
+      
+      // Debounced callback to reduce excessive mutations processing
+      const processBadgeMutations = debounce((mutations) => {
         mutations.forEach((mutation) => {
           mutation.addedNodes.forEach((node) => {
             if (node.nodeType === 1) {
@@ -398,13 +440,15 @@
             }
           });
         });
-      });
+      }, 200); // Debounce 200ms to batch rapid DOM changes
+
+      observer = new MutationObserver(processBadgeMutations);
 
       const discussionsContainer = document.querySelector(DISCUSSIONS_SELECTOR);
       if (discussionsContainer) {
         observer.observe(discussionsContainer, {
           childList: true,
-          subtree: true,
+          subtree: false, // Limited to direct children for better performance
         });
         // // // // console.log("✅ [MYM] Badges observer attached");
       } else {
@@ -435,15 +479,17 @@
         });
       }, 1000);
 
-      // Observer pour les nouveaux inputs
-      const emojiObserver = new MutationObserver(() => {
+      // Observer pour les nouveaux inputs avec debounce
+      const processEmojiMutations = debounce(() => {
         const inputFields = document.querySelectorAll(".input__field");
         inputFields.forEach((field) => {
           if (!field.querySelector(".mym-emoji-trigger")) {
             contentAPI.emoji.addEmojiButtonToInput(field);
           }
         });
-      });
+      }, 300); // Debounce 300ms pour éviter scan excessif
+
+      const emojiObserver = new MutationObserver(processEmojiMutations);
 
       emojiObserver.observe(document.body, {
         childList: true,
@@ -463,12 +509,14 @@
         contentAPI.notes.createNotesButton();
       }, 1000);
 
-      // Observer pour réinjecter le bouton si nécessaire
-      const notesObserver = new MutationObserver(() => {
+      // Observer pour réinjecter le bouton si nécessaire avec debounce
+      const processNotesMutations = debounce(() => {
         if (isChatPage && !document.getElementById("mym-notes-button")) {
           contentAPI.notes.createNotesButton();
         }
-      });
+      }, 300); // Debounce 300ms pour éviter checks répétés
+
+      const notesObserver = new MutationObserver(processNotesMutations);
 
       notesObserver.observe(document.body, {
         childList: true,
@@ -537,42 +585,204 @@
           contentAPI.emojiEnabled = emojiEnabled;
           contentAPI.notesEnabled = notesEnabled;
 
-          // NOTE: Le polling est géré par auto-polling.js
+          // Re-initialize enabled features
+          if (badgesEnabled && contentAPI.badges && contentAPI.badges.scanExistingListsForBadges) {
+            setTimeout(() => contentAPI.badges.scanExistingListsForBadges(), 500);
+          }
+          
+          if (statsEnabled && contentAPI.stats && contentAPI.stats.injectUserInfoBox) {
+            const username = contentAPI.getCurrentConversationUsername();
+            if (username) {
+              setTimeout(() => contentAPI.stats.injectUserInfoBox(username), 500);
+            }
+          }
+          
+          if (emojiEnabled && contentAPI.emoji && contentAPI.emoji.addEmojiButtonToInput) {
+            const inputs = document.querySelectorAll('textarea[placeholder*="message"], textarea[name="message"]');
+            inputs.forEach(input => {
+              const container = input.closest('.form-message, .message-input-container, .chat-input');
+              if (container && !container.querySelector('.mym-emoji-trigger')) {
+                contentAPI.emoji.addEmojiButtonToInput(container);
+              }
+            });
+          }
+          
+          if (notesEnabled && contentAPI.notes && contentAPI.notes.createNotesButton) {
+            const chatHeader = document.querySelector(SELECTORS.CHAT_HEADER);
+            if (chatHeader && !chatHeader.querySelector('#mym-notes-button')) {
+              setTimeout(() => contentAPI.notes.createNotesButton(), 500);
+            }
+          }
+
+          console.log("✅ [MYM] Features re-enabled and UI re-injected");
         });
       }
 
       if (message.action === "featuresDisabled") {
+        // Disable features flags
         badgesEnabled = false;
         statsEnabled = false;
         emojiEnabled = false;
         notesEnabled = false;
-        // NOTE: Polling arrêté par auto-polling.js
 
-        // Recharger seulement si on est sur mym.fans
-        if (window.location.hostname.includes('mym.fans')) {
-          setTimeout(() => {
-            window.location.reload();
-          }, 500);
-        } else {
-          console.log("ℹ️ [MYM] Features disabled but not on mym.fans, skipping reload");
+        // Update module flags
+        contentAPI.badgesEnabled = false;
+        contentAPI.statsEnabled = false;
+        contentAPI.emojiEnabled = false;
+        contentAPI.notesEnabled = false;
+
+        // Remove UI elements from DOM instead of reloading
+        if (contentAPI.badges && contentAPI.badges.removeBadgesUI) {
+          contentAPI.badges.removeBadgesUI();
         }
+        if (contentAPI.stats && contentAPI.stats.removeStatsBox) {
+          contentAPI.stats.removeStatsBox();
+        }
+        if (contentAPI.emoji && contentAPI.emoji.removeEmojiUI) {
+          contentAPI.emoji.removeEmojiUI();
+        }
+        if (contentAPI.notes && contentAPI.notes.removeNotesUI) {
+          contentAPI.notes.removeNotesUI();
+        }
+
+        // Stop polling (handled by auto-polling.js)
+        console.log("🛑 [MYM] All features disabled and UI elements removed");
       }
 
       if (message.type === "REFRESH_FIREBASE_TOKEN") {
         (async () => {
-          const token = await contentAPI.safeStorageGet("local", [
-            "access_token",
-          ]);
-          if (token.access_token) {
-            // // // // console.log("🔄 [MYM] Proactive Firebase token refresh");
-            // Token refresh logic would go here
+          try {
+            console.log("🔄 [MYM] Proactive Firebase token refresh requested");
+            
+            // Déclencher le refresh via le site web si on est sur creators.mym.fans
+            if (window.location.hostname === 'creators.mym.fans') {
+              // Demander au site web de rafraîchir le token
+              window.dispatchEvent(new CustomEvent('extension-request-fresh-token'));
+              
+              // Attendre un peu pour que le site web rafraîchisse le token
+              await new Promise(resolve => setTimeout(resolve, 1000));
+              
+              console.log("✅ [MYM] Token refresh triggered via website");
+            } else {
+              // Si on n'est pas sur le site, on ne peut pas rafraîchir
+              console.log("ℹ️ [MYM] Not on creators.mym.fans, skipping token refresh");
+            }
+          } catch (error) {
+            console.error("❌ [MYM] Error refreshing token:", error);
           }
         })();
+      }
+
+      if (message.action === "applyTheme" && message.theme) {
+        // Appliquer le thème sur la page
+        applyThemeToPage(message.theme);
       }
     };
 
     chrome.runtime.onMessage.addListener(messageListener);
   }
+
+  // ========================================
+  // THEME APPLICATION
+  // ========================================
+  function applyThemeToPage(theme) {
+    // Créer ou mettre à jour la balise <style> pour le thème
+    let themeStyle = document.getElementById("mym-theme-style");
+    if (!themeStyle) {
+      themeStyle = document.createElement("style");
+      themeStyle.id = "mym-theme-style";
+      document.head.appendChild(themeStyle);
+    }
+
+    // CSS pour appliquer le thème sur les éléments de la page
+    themeStyle.textContent = `
+      /* Theme override for MYM pages */
+      :root {
+        --mym-theme-primary: ${theme.primary} !important;
+        --mym-theme-secondary: ${theme.secondary} !important;
+        --mym-theme-gradient: ${theme.gradient} !important;
+      }
+
+      /* Appliquer aux boutons principaux */
+      button[class*="primary"],
+      .btn-primary,
+      [class*="PrimaryButton"] {
+        background: ${theme.gradient} !important;
+      }
+
+      /* Appliquer aux liens actifs */
+      a.active,
+      [class*="active"] a {
+        color: ${theme.primary} !important;
+      }
+
+      /* Appliquer aux badges de revenus */
+      .revenue-badge,
+      [class*="RevenueBadge"] {
+        background: ${theme.gradient} !important;
+      }
+
+      /* Appliquer aux éléments de stats */
+      .stats-box,
+      [class*="StatsBox"] {
+        border-color: ${theme.primary} !important;
+      }
+
+      /* Appliquer aux highlights */
+      ::selection {
+        background: ${theme.primary} !important;
+        color: white !important;
+      }
+    `;
+
+    console.log(`🎨 [MYM] Thème "${theme.name}" appliqué`);
+  }
+
+  // Charger et appliquer le thème au chargement
+  chrome.storage.local.get(["user_theme"], (data) => {
+    const themeName = data.user_theme || "default";
+    const THEMES = {
+      default: {
+        name: "Violet",
+        primary: "#667eea",
+        secondary: "#764ba2",
+        gradient: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
+      },
+      blue: {
+        name: "Bleu",
+        primary: "#4facfe",
+        secondary: "#00f2fe",
+        gradient: "linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)",
+      },
+      green: {
+        name: "Vert",
+        primary: "#43e97b",
+        secondary: "#38f9d7",
+        gradient: "linear-gradient(135deg, #43e97b 0%, #38f9d7 100%)",
+      },
+      pink: {
+        name: "Rose",
+        primary: "#f857a6",
+        secondary: "#ff5858",
+        gradient: "linear-gradient(135deg, #f857a6 0%, #ff5858 100%)",
+      },
+      orange: {
+        name: "Orange",
+        primary: "#fa709a",
+        secondary: "#fee140",
+        gradient: "linear-gradient(135deg, #fa709a 0%, #fee140 100%)",
+      },
+      dark: {
+        name: "Sombre",
+        primary: "#434343",
+        secondary: "#000000",
+        gradient: "linear-gradient(135deg, #434343 0%, #000000 100%)",
+      },
+    };
+
+    const theme = THEMES[themeName] || THEMES.default;
+    applyThemeToPage(theme);
+  });
 
   // ========================================
   // CLEANUP
@@ -651,16 +861,15 @@
       );
 
       if (anyFeatureDisabled) {
-        console.log("⚠️ [MYM] Features disabled by background, reloading page...");
+        console.log("⚠️ [MYM] Features disabled by background");
         console.log("Changes detected:", changes);
-        // Recharger la page seulement si on est sur mym.fans
-        if (window.location.hostname.includes('mym.fans')) {
-          setTimeout(() => {
-            window.location.reload();
-          }, 500);
-        } else {
-          console.log("ℹ️ [MYM] Not on mym.fans, skipping reload");
-        }
+        
+        // NE PLUS recharger automatiquement la page
+        // Au lieu de cela, laisser les handlers de cleanup faire leur travail
+        // L'utilisateur peut recharger manuellement s'il le souhaite
+        
+        // Note: Le reload automatique causait des problèmes de déconnexion
+        // car il se déclenchait pendant la vérification d'abonnement au chargement
       }
     }
   });
@@ -670,18 +879,6 @@
   // ========================================
   (async function init() {
     // // // // console.log("🎬 [MYM] Initializing extension...");
-
-    // 🔥 CHROME FIX: Forcer la vérification de l'abonnement au chargement de la page
-    // Car le service worker Chrome ne se réveille pas toujours avec les alarmes
-    try {
-      chrome.runtime.sendMessage({ type: "FORCE_SUBSCRIPTION_CHECK" }, (response) => {
-        if (chrome.runtime.lastError) {
-          console.log("⚠️ [MYM] Could not reach background (extension reloading?)");
-        }
-      });
-    } catch (e) {
-      // Ignore si le background n'est pas disponible
-    }
 
     // 1. Vérifier d'abord si les fonctionnalités sont activées (check background.js flags)
     const mainFlags = await contentAPI.safeStorageGet("local", [

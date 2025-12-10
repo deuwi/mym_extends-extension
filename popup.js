@@ -102,9 +102,10 @@
         ...Object.values(toggles),
       ],
       (data) => {
+        const safeData = data || {};
         // Priorité au firebaseToken, sinon access_token
-        const token = data.firebaseToken || data.access_token;
-        const tokenTime = data.access_token_stored_at;
+        const token = safeData.firebaseToken || safeData.access_token;
+        const tokenTime = safeData.access_token_stored_at;
         
         // 🔍 Vérifier si les features sont activées (le background a déjà vérifié l'abonnement)
         const anyFeatureEnabled = Object.values(toggles).some(
@@ -281,9 +282,10 @@
           "access_token_stored_at",
         ],
         async (data) => {
-          const token = data.firebaseToken || data.access_token;
-          const email = data.user_email;
-          const tokenStoredAt = data.access_token_stored_at;
+          const safeData = data || {};
+          const token = safeData.firebaseToken || safeData.access_token;
+          const email = safeData.user_email;
+          const tokenStoredAt = safeData.access_token_stored_at;
 
           if (!token && !email) {
             console.error("❌ Aucun token disponible");
@@ -420,7 +422,8 @@
       if (!email) {
         const storageData = await new Promise((resolve) => {
           chrome.storage.local.get(["user_email"], (items) => {
-            resolve(items);
+            const safeItems = items || {};
+            resolve(safeItems);
           });
         });
         email = storageData.user_email;
@@ -429,7 +432,8 @@
       // Vérifier l'âge du token
       const result = await new Promise((resolve) => {
         chrome.storage.local.get(["access_token_stored_at"], (items) => {
-          resolve(items.access_token_stored_at);
+          const safeItems = items || {};
+          resolve(safeItems.access_token_stored_at);
         });
       });
 
@@ -503,10 +507,11 @@
 
         // Mettre à jour visuellement les toggles
         chrome.storage.local.get(Object.values(toggles), (items) => {
+          const safeItems = items || {};
           Object.entries(toggles).forEach(([elementId, storageKey]) => {
             const element = document.getElementById(elementId);
             if (element) {
-              const isOn = items[storageKey] ?? defaults[storageKey];
+              const isOn = safeItems[storageKey] ?? defaults[storageKey];
               renderToggle(element, isOn);
             }
           });
@@ -560,10 +565,11 @@
 
         // Mettre à jour visuellement les toggles selon leur état dans le storage
         chrome.storage.local.get(Object.values(toggles), (items) => {
+          const safeItems = items || {};
           Object.entries(toggles).forEach(([elementId, storageKey]) => {
             const element = document.getElementById(elementId);
             if (element) {
-              const isOn = items[storageKey] ?? defaults[storageKey];
+              const isOn = safeItems[storageKey] ?? defaults[storageKey];
               renderToggle(element, isOn);
             }
           });
@@ -577,11 +583,25 @@
         // Vérifier si l'utilisateur a une licence agence (même révoquée)
         checkLicense().then((licenseData) => {
           if (licenseData && licenseData.license) {
-            // L'utilisateur a une licence mais elle est révoquée ou inactive
-            showStatus(
-              "⚠️ Votre licence agence est inactive. Contactez votre agence ou souscrivez un abonnement.",
-              "error"
-            );
+            // Vérifier si l'abonnement de l'agence est inactif
+            if (licenseData.agency_subscription_active === false) {
+              showStatus(
+                "⚠️ Votre agence a annulé son abonnement. Les fonctionnalités sont désactivées. Contactez votre agence ou souscrivez un abonnement individuel.",
+                "error"
+              );
+            } else if (licenseData.license.status === "revoked") {
+              // L'utilisateur a une licence mais elle est révoquée
+              showStatus(
+                "⚠️ Votre licence agence a été révoquée. Contactez votre agence ou souscrivez un abonnement.",
+                "error"
+              );
+            } else {
+              // L'utilisateur a une licence mais elle est inactive pour une autre raison
+              showStatus(
+                "⚠️ Votre licence agence est inactive. Contactez votre agence ou souscrivez un abonnement.",
+                "error"
+              );
+            }
           } else {
             // Aucune licence - proposer de s'abonner ou d'activer une clé
             showStatus(
@@ -757,7 +777,8 @@
       }
 
       chrome.storage.local.get([storageKey], (data) => {
-        const currentVal = data[storageKey] ?? false;
+        const safeData = data || {};
+        const currentVal = safeData[storageKey] ?? false;
         const newVal = !currentVal;
         chrome.storage.local.set({ [storageKey]: newVal }, () => {
           renderToggle(element, newVal);
@@ -780,8 +801,9 @@
       chrome.storage.local.get(
         ["firebaseToken", "access_token", "user_email"],
         async (data) => {
-          const token = data.firebaseToken || data.access_token;
-          const email = data.user_email;
+          const safeData = data || {};
+          const token = safeData.firebaseToken || safeData.access_token;
+          const email = safeData.user_email;
 
           if (!token && !email) {
             resolve(false);
@@ -844,8 +866,9 @@
       chrome.storage.local.get(
         ["firebaseToken", "access_token", "user_email"],
         async (data) => {
-          const token = data.firebaseToken || data.access_token;
-          const email = data.user_email;
+          const safeData = data || {};
+          const token = safeData.firebaseToken || safeData.access_token;
+          const email = safeData.user_email;
 
           if (!token && !email) {
             resolve(null);
@@ -897,8 +920,9 @@
       chrome.storage.local.get(
         ["firebaseToken", "access_token", "user_email"],
         async (data) => {
-          const token = data.firebaseToken || data.access_token;
-          const email = data.user_email;
+          const safeData = data || {};
+          const token = safeData.firebaseToken || safeData.access_token;
+          const email = safeData.user_email;
 
           if (!token && !email) {
             reject(new Error("Non authentifié"));
@@ -1097,4 +1121,122 @@
   if (pricingLink) {
     pricingLink.href = `${FRONTEND_URL}/pricing`;
   }
+
+  // ========================================
+  // THEME MANAGEMENT
+  // ========================================
+
+  const THEMES = {
+    default: {
+      name: "Violet",
+      primary: "#667eea",
+      secondary: "#764ba2",
+      gradient: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
+    },
+    blue: {
+      name: "Bleu",
+      primary: "#4facfe",
+      secondary: "#00f2fe",
+      gradient: "linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)",
+    },
+    green: {
+      name: "Vert",
+      primary: "#43e97b",
+      secondary: "#38f9d7",
+      gradient: "linear-gradient(135deg, #43e97b 0%, #38f9d7 100%)",
+    },
+    pink: {
+      name: "Rose",
+      primary: "#f857a6",
+      secondary: "#ff5858",
+      gradient: "linear-gradient(135deg, #f857a6 0%, #ff5858 100%)",
+    },
+    orange: {
+      name: "Orange",
+      primary: "#fa709a",
+      secondary: "#fee140",
+      gradient: "linear-gradient(135deg, #fa709a 0%, #fee140 100%)",
+    },
+    dark: {
+      name: "Sombre",
+      primary: "#434343",
+      secondary: "#000000",
+      gradient: "linear-gradient(135deg, #434343 0%, #000000 100%)",
+    },
+  };
+
+  function applyTheme(themeName) {
+    const theme = THEMES[themeName] || THEMES.default;
+    
+    // Appliquer les CSS variables
+    document.documentElement.style.setProperty("--theme-primary", theme.primary);
+    document.documentElement.style.setProperty("--theme-secondary", theme.secondary);
+    document.documentElement.style.setProperty("--theme-gradient", theme.gradient);
+
+    // Mettre à jour tous les éléments avec gradient
+    const gradientElements = document.querySelectorAll(".popup-header h1, .toggle.on, .link-container a.pricing-link");
+    gradientElements.forEach((el) => {
+      if (el.classList.contains("toggle")) {
+        el.style.background = theme.gradient;
+      } else if (el.classList.contains("pricing-link")) {
+        el.style.background = theme.gradient;
+      } else {
+        el.style.background = theme.gradient;
+        el.style.webkitBackgroundClip = "text";
+        el.style.backgroundClip = "text";
+      }
+    });
+
+    // Stocker le thème sélectionné
+    chrome.storage.local.set({ user_theme: themeName });
+
+    // Envoyer le thème au content script pour l'appliquer sur la page
+    chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+      if (tabs[0]) {
+        chrome.tabs.sendMessage(tabs[0].id, {
+          action: "applyTheme",
+          theme: theme,
+        });
+      }
+    });
+  }
+
+  function initializeThemeSelector() {
+    const themeOptions = document.querySelectorAll(".theme-option");
+    
+    // Charger le thème actuel
+    chrome.storage.local.get(["user_theme"], (data) => {
+      const currentTheme = data.user_theme || "default";
+      
+      // Appliquer le thème
+      applyTheme(currentTheme);
+
+      // Mettre à jour l'UI
+      themeOptions.forEach((option) => {
+        option.classList.remove("active");
+        if (option.dataset.theme === currentTheme) {
+          option.classList.add("active");
+        }
+      });
+    });
+
+    // Gérer les clics sur les thèmes
+    themeOptions.forEach((option) => {
+      option.addEventListener("click", () => {
+        const themeName = option.dataset.theme;
+        
+        // Retirer la classe active de tous
+        themeOptions.forEach((opt) => opt.classList.remove("active"));
+        
+        // Ajouter la classe active au sélectionné
+        option.classList.add("active");
+        
+        // Appliquer le thème
+        applyTheme(themeName);
+      });
+    });
+  }
+
+  // Initialiser le sélecteur de thème
+  initializeThemeSelector();
 })();

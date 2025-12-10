@@ -1,5 +1,17 @@
 // background.js - Initialize default values on extension install
 
+// Disable navigation preload warning for service worker
+self.addEventListener('activate', (event) => {
+  event.waitUntil(
+    (async () => {
+      // Disable navigation preload if it's enabled
+      if (self.registration.navigationPreload) {
+        await self.registration.navigationPreload.disable();
+      }
+    })()
+  );
+});
+
 // 🦊 Firefox utilise 'browser' nativement, Chrome utilise 'chrome'
 // On créé un alias unifié
 if (typeof browser !== "undefined") {
@@ -102,7 +114,8 @@ function checkConnectionStatus() {
   chrome.storage.local.get(
     ["firebaseToken", "access_token", "user_email"],
     (data) => {
-      if (data.firebaseToken || data.access_token) {
+      const safeData = data || {};
+      if (safeData.firebaseToken || safeData.access_token) {
         updateExtensionIcon("connected");
       } else {
         updateExtensionIcon("disconnected");
@@ -141,18 +154,6 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     });
 
     return true; // Indique qu'on va répondre de manière asynchrone
-  }
-
-  // 🔥 CHROME FIX: Message pour forcer la vérification de l'abonnement
-  if (message.type === "FORCE_SUBSCRIPTION_CHECK") {
-    // console.log("🔄 [BACKGROUND] Forced subscription check requested from content script");
-    checkAndEnableFeatures().then(() => {
-      sendResponse({ success: true });
-    }).catch((err) => {
-      console.error("❌ [BACKGROUND] Error during forced check:", err);
-      sendResponse({ success: false, error: err.message });
-    });
-    return true; // Réponse asynchrone
   }
 
   // 🔥 Nouveau: Support pour Firebase Token depuis la page web
@@ -310,11 +311,12 @@ chrome.runtime.onInstalled.addListener(() => {
   };
 
   chrome.storage.local.get(Object.keys(defaults), (items) => {
+    const safeItems = items || {};
     const updates = {};
 
     // Only set values that don't exist yet
     Object.entries(defaults).forEach(([key, value]) => {
-      if (items[key] === undefined) {
+      if (safeItems[key] === undefined) {
         updates[key] = value;
       }
     });
@@ -341,21 +343,36 @@ function startSubscriptionCheck() {
   
   // console.log(`⏰ [BACKGROUND] Subscription check interval: ${interval / 1000 / 60} minutes`);
   
-  // Vérifier immédiatement au démarrage
-  checkSubscriptionStatus();
+  // Vérifier après 5 secondes (laisser le temps au storage de se charger)
+  setTimeout(() => checkSubscriptionStatus(), 5000);
 
   // Puis vérifier selon l'intervalle configuré
-  setInterval(checkSubscriptionStatus, interval);
+  setInterval(() => checkSubscriptionStatus(), interval);
 }
 
-async function checkSubscriptionStatus() {
+// Debounce pour éviter les appels multiples rapprochés
+let lastCheckTime = 0;
+const CHECK_COOLDOWN = 5000; // 5 secondes minimum entre deux vérifications
+
+async function checkSubscriptionStatus(force = false) {
+  const now = Date.now();
+  
+  // Ignorer si déjà vérifié il y a moins de 5 secondes (sauf si force=true)
+  if (!force && (now - lastCheckTime) < CHECK_COOLDOWN) {
+    console.log("⏭️ [BACKGROUND] Subscription check skipped (cooldown)");
+    return;
+  }
+  
+  lastCheckTime = now;
+  
   chrome.storage.local.get(
     ["access_token", "firebaseToken", "access_token_stored_at", "user_email"],
     async (data) => {
+      const safeData = data || {};
       // Priorité au firebaseToken, sinon access_token
-      const token = data.firebaseToken || data.access_token;
-      const email = data.user_email;
-      const tokenTime = data.access_token_stored_at || 0;
+      const token = safeData.firebaseToken || safeData.access_token;
+      const email = safeData.user_email;
+      const tokenTime = safeData.access_token_stored_at || 0;
       const now = Date.now();
       const ageMs = now - tokenTime;
       const ninetyDays = 365 * 24 * 60 * 60 * 1000; // 365 jours au lieu de 90
@@ -474,8 +491,9 @@ async function checkSubscriptionStatusSync() {
     chrome.storage.local.get(
       ["access_token", "firebaseToken", "user_email"],
       async (data) => {
-        const token = data.firebaseToken || data.access_token;
-        const email = data.user_email;
+        const safeData = data || {};
+        const token = safeData.firebaseToken || safeData.access_token;
+        const email = safeData.user_email;
 
         if (!token && !email) {
           console.warn("⚠️ [BACKGROUND] No token or email found");
@@ -565,8 +583,9 @@ function disableAllFeatures(iconState = "disconnected") {
       "mym_notes_enabled",
     ],
     (currentState) => {
-      // console.log("📊 [BACKGROUND] Current features state:", currentState);
-      const wasAnyEnabled = Object.values(currentState).some(
+      const safeState = currentState || {};
+      // console.log("📊 [BACKGROUND] Current features state:", safeState);
+      const wasAnyEnabled = Object.values(safeState).some(
         (val) => val === true
       );
       // console.log(`📊 [BACKGROUND] Any feature was enabled: ${wasAnyEnabled}`);
@@ -612,9 +631,10 @@ async function checkAndEnableFeatures() {
         resolve
       );
     });
-    const token = storageData.firebaseToken || storageData.access_token;
-    const email = storageData.user_email;
-    const tokenStoredAt = storageData.access_token_stored_at;
+    const safeStorageData = storageData || {};
+    const token = safeStorageData.firebaseToken || safeStorageData.access_token;
+    const email = safeStorageData.user_email;
+    const tokenStoredAt = safeStorageData.access_token_stored_at;
 
     if (!token && !email) {
       // console.log("ℹ️ Pas de token ni d'email - utilisateur non connecté");
@@ -719,6 +739,9 @@ async function checkAndEnableFeatures() {
       'mym_notes_enabled'
     ]);
 
+    // S'assurer que currentState est un objet valide
+    const safeCurrentState = currentState || {};
+
     if (hasAccess) {
       const allEnabled = {
         mym_live_enabled: true,
@@ -730,7 +753,7 @@ async function checkAndEnableFeatures() {
 
       // Ne mettre à jour que si l'état a vraiment changé
       const needsUpdate = Object.keys(allEnabled).some(
-        key => currentState[key] !== allEnabled[key]
+        key => safeCurrentState[key] !== allEnabled[key]
       );
 
       if (needsUpdate) {
@@ -753,7 +776,7 @@ async function checkAndEnableFeatures() {
 
       // Ne mettre à jour que si l'état a vraiment changé
       const needsUpdate = Object.keys(allDisabled).some(
-        key => currentState[key] !== allDisabled[key]
+        key => safeCurrentState[key] !== allDisabled[key]
       );
 
       if (needsUpdate) {
@@ -811,7 +834,9 @@ chrome.storage.onChanged.addListener((changes, areaName) => {
     if (featureChanged) {
       // Vérifier l'état actuel de toutes les features
       chrome.storage.local.get(featureKeys, (data) => {
-        const anyEnabled = Object.values(data).some(val => val === true);
+        // S'assurer que data est un objet valide
+        const safeData = data || {};
+        const anyEnabled = Object.values(safeData).some(val => val === true);
         
         if (anyEnabled) {
           // Au moins une fonctionnalité active → icône verte
@@ -819,7 +844,8 @@ chrome.storage.onChanged.addListener((changes, areaName) => {
         } else {
           // Aucune fonctionnalité active → vérifier si token existe
           chrome.storage.local.get(["firebaseToken", "access_token"], (tokens) => {
-            if (tokens.firebaseToken || tokens.access_token) {
+            const safeTokens = tokens || {};
+            if (safeTokens.firebaseToken || safeTokens.access_token) {
               // Token existe mais features désactivées → icône rouge (abonnement expiré)
               updateExtensionIcon("error");
             } else {
@@ -841,7 +867,8 @@ self.addEventListener("activate", () => {
 
 // Vérifier immédiatement si déjà des credentials en storage
 chrome.storage.local.get(["firebaseToken", "user_email"], (data) => {
-  if (data.firebaseToken || data.user_email) {
+  const safeData = data || {};
+  if (safeData.firebaseToken || safeData.user_email) {
     checkAndEnableFeatures();
   }
 });
@@ -880,15 +907,16 @@ chrome.alarms.onAlarm.addListener((alarm) => {
 async function refreshFirebaseToken() {
   try {
     const data = await new Promise((resolve) => {
-      chrome.storage.local.get(["firebaseToken", "user_email"], resolve);
+      chrome.storage.local.get(["firebaseToken", "user_email", "access_token"], resolve);
     });
 
-    if (!data.firebaseToken || !data.user_email) {
+    const safeData = data || {};
+    if ((!safeData.firebaseToken && !safeData.access_token) || !safeData.user_email) {
       // console.log("ℹ️ Pas de token Firebase à rafraîchir");
       return;
     }
 
-    // console.log("🔄 Rafraîchissement automatique du token Firebase...");
+    console.log("🔄 Rafraîchissement automatique du token Firebase...");
 
     // Envoyer un message aux content scripts pour déclencher le rafraîchissement
     chrome.tabs.query({ url: "https://creators.mym.fans/*" }, (tabs) => {
@@ -896,13 +924,51 @@ async function refreshFirebaseToken() {
         console.warn("⚠️ Tab query error:", chrome.runtime.lastError.message);
         return;
       }
+      
       if (tabs && tabs.length > 0) {
+        // On a déjà un onglet ouvert sur creators.mym.fans
         chrome.tabs.get(tabs[0].id, (tab) => {
           if (!chrome.runtime.lastError && tab) {
+            console.log("✅ Envoi de REFRESH_FIREBASE_TOKEN à l'onglet existant");
             chrome.tabs.sendMessage(tabs[0].id, {
               type: "REFRESH_FIREBASE_TOKEN",
+            }, (response) => {
+              if (chrome.runtime.lastError) {
+                console.warn("⚠️ Error sending refresh message:", chrome.runtime.lastError.message);
+              } else {
+                console.log("✅ Token refresh message sent successfully");
+              }
             });
           }
+        });
+      } else {
+        // Pas d'onglet ouvert, on ouvre silencieusement la page pour rafraîchir le token
+        console.log("ℹ️ Aucun onglet creators.mym.fans ouvert, ouverture d'un nouvel onglet pour refresh");
+        chrome.tabs.create({
+          url: "https://creators.mym.fans/app/myms",
+          active: false // Ouvrir en arrière-plan
+        }, (newTab) => {
+          // Attendre que la page soit chargée
+          setTimeout(() => {
+            if (newTab && newTab.id) {
+              chrome.tabs.sendMessage(newTab.id, {
+                type: "REFRESH_FIREBASE_TOKEN",
+              }, (response) => {
+                if (chrome.runtime.lastError) {
+                  console.warn("⚠️ Error sending refresh message to new tab:", chrome.runtime.lastError.message);
+                } else {
+                  console.log("✅ Token refresh message sent to new tab");
+                  // Fermer l'onglet après 3 secondes
+                  setTimeout(() => {
+                    if (newTab.id) {
+                      chrome.tabs.remove(newTab.id);
+                      console.log("✅ Background tab closed after token refresh");
+                    }
+                  }, 3000);
+                }
+              });
+            }
+          }, 2000); // Attendre 2 secondes que la page se charge
         });
       }
     });

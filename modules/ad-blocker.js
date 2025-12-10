@@ -184,10 +184,11 @@
       }
     });
 
-    // Observe entire document for changes
-    observer.observe(document.body, {
+    // Observe chat container for changes (more targeted than entire body)
+    var targetNode = document.querySelector('.chat') || document.body;
+    observer.observe(targetNode, {
       childList: true,      // Watch for added/removed nodes
-      subtree: true,        // Watch all descendants
+      subtree: true,        // Watch descendants (needed for dynamic ads)
     });
 
     debugLog('👀 [AdBlocker] MutationObserver active');

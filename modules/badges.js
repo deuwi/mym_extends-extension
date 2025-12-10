@@ -589,12 +589,22 @@
     });
   }
 
+  /**
+   * Remove all badges from DOM
+   */
+  function removeBadgesUI() {
+    const badges = document.querySelectorAll(".mym-total-spent-badge, .mym-category-badge");
+    badges.forEach((badge) => badge.remove());
+    // console.log(`🧹 [MYM Badges] Removed ${badges.length} badge(s) from DOM`);
+  }
+
   // Export des fonctions publiques
   contentAPI.badges = {
     fetchUserDetailedInfo,
     addTotalSpentBadgeToCard,
     scanExistingListsForBadges,
     scanSingleCard,
+    removeBadgesUI,
   };
 
   // // // // console.log("✅ [MYM Badges] Module loaded");

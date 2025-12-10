@@ -33,8 +33,13 @@
         // // // console.log("🎨 [MYM Stats] Creating new stats box");
         userInfoBox = document.createElement("div");
         userInfoBox.id = "mym-user-info-box";
+        
+        // Appliquer le thème depuis le storage
+        const gradient = getComputedStyle(document.documentElement).getPropertyValue('--mym-theme-gradient').trim() || 
+                        `linear-gradient(135deg, ${window.APP_CONFIG.PRIMARY_GRADIENT_START} 0%, ${window.APP_CONFIG.PRIMARY_GRADIENT_END} 100%)`;
+        
         userInfoBox.style.cssText = `
-          background: linear-gradient(135deg, ${window.APP_CONFIG.PRIMARY_GRADIENT_START} 0%, ${window.APP_CONFIG.PRIMARY_GRADIENT_END} 100%);
+          background: ${gradient};
           border-radius: 12px;
           padding: 8px;
           margin-bottom: 8px;
@@ -54,6 +59,11 @@
         }
       } else {
         // // // console.log("♻️ [MYM Stats] Reusing existing box");
+        // Mettre à jour le gradient si le thème a changé
+        const gradient = getComputedStyle(document.documentElement).getPropertyValue('--mym-theme-gradient').trim();
+        if (gradient) {
+          userInfoBox.style.background = gradient;
+        }
       }
 
       userInfoBox.innerHTML = `

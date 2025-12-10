@@ -21,6 +21,10 @@
   let lastConversationsPollTime = 0;
   let isTabVisible = true;
 
+  // Use shared utilities from API
+  const debounce = contentAPI.debounce;
+  const SELECTORS = contentAPI.SELECTORS;
+
   // ========================================
   // MESSAGE INJECTION FROM HTML PARSING
   // ========================================
@@ -33,7 +37,7 @@
       const fetchedMessages = doc.querySelectorAll(".chat-message[data-chat-message-id]");
 
       // Trouver le conteneur de messages sur la page actuelle
-      const chatContainer = document.querySelector(".discussions__chats");
+      const chatContainer = document.querySelector(SELECTORS.DISCUSSIONS_CHATS);
       if (!chatContainer) {
         console.error("❌ [MYM Polling] Chat container not found");
         return 0;
@@ -248,7 +252,7 @@
   let lastUrl = location.href;
 
   function observeNavigation() {
-    const observer = new MutationObserver(() => {
+    const checkNavigation = debounce(() => {
       const currentUrl = location.href;
       if (currentUrl !== lastUrl) {
         lastUrl = currentUrl;
@@ -263,11 +267,13 @@
           stopPolling();
         }
       }
-    });
+    }, 300);
+
+    const observer = new MutationObserver(checkNavigation);
 
     observer.observe(document.body, {
       childList: true,
-      subtree: true,
+      subtree: false, // Limit to direct children for performance
     });
   }
 

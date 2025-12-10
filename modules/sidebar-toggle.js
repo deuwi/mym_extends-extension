@@ -8,6 +8,10 @@
 
   let sidebarVisible = false;
 
+  // Use shared utilities from API
+  const debounce = contentAPI.debounce;
+  const SELECTORS = contentAPI.SELECTORS;
+
   /**
    * Create and inject the sidebar toggle button
    */
@@ -49,7 +53,7 @@
 
     if (listRowLeft) {
       // Insert after the back button
-      const backButton = listRowLeft.querySelector(".list__row__left__back");
+      const backButton = listRowLeft.querySelector(SELECTORS.LIST_ROW_LEFT_BACK);
       // console.log("📱 Back button found:", backButton ? "YES" : "NO");
 
       if (backButton && backButton.nextSibling) {
@@ -211,31 +215,32 @@
       createSidebarToggleButton();
     }, 500);
 
-    // Listen for window resize to show/hide button
-    window.addEventListener("resize", () => {
-      checkButtonVisibility();
-    });
+    // Listen for window resize to show/hide button with debounce
+    const debouncedCheckVisibility = debounce(checkButtonVisibility, 150);
+    window.addEventListener("resize", debouncedCheckVisibility);
 
-    // Observe for navigation changes and retry injection
-    const observer = new MutationObserver(() => {
+    // Observe for navigation changes and retry injection with debounce
+    const checkButtonInjection = debounce(() => {
       // Don't observe on /app/myms
       if (window.location.pathname === "/app/myms") {
         return;
       }
 
       const button = document.getElementById("mym-sidebar-toggle");
-      const listRowLeft = document.querySelector(".list__row__left");
+      const listRowLeft = document.querySelector(SELECTORS.LIST_ROW_LEFT);
 
       // If no button but list__row__left exists, inject it
       if (!button && listRowLeft) {
         // console.log("📱 Detected list__row__left, injecting button...");
         createSidebarToggleButton();
       }
-    });
+    }, 200);
+
+    const observer = new MutationObserver(checkButtonInjection);
 
     observer.observe(document.body, {
       childList: true,
-      subtree: true,
+      subtree: false, // Limit to direct children for performance
     });
 
     // console.log("✅ Sidebar Toggle: Initialized");

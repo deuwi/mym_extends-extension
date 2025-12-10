@@ -17,6 +17,23 @@
   
   log('🚫 [AdBlocker-Early] Starting early ad blocker...');
   
+  // ========================================
+  // UTILITY: DEBOUNCE
+  // ========================================
+  var debounce = function(func, wait) {
+    var timeout;
+    return function() {
+      var context = this;
+      var args = arguments;
+      var later = function() {
+        timeout = null;
+        func.apply(context, args);
+      };
+      clearTimeout(timeout);
+      timeout = setTimeout(later, wait);
+    };
+  };
+  
   // Aggressive removal function
   var removeAds = function() {
     let removed = 0;
@@ -51,6 +68,14 @@
   // Run immediately
   removeAds();
   
+  // Debounced check for ads
+  var checkAndRemoveAds = debounce(function() {
+    var removed = removeAds();
+    if (removed > 0) {
+      log('🚫 [AdBlocker-Early] Blocked ' + removed + ' ad(s)');
+    }
+  }, 100);
+  
   // Run on every state change
   var observer = new MutationObserver(function(mutations) {
     var hasAds = mutations.some(function(m) {
@@ -64,10 +89,7 @@
     });
     
     if (hasAds) {
-      var removed = removeAds();
-      if (removed > 0) {
-        log('🚫 [AdBlocker-Early] Blocked ' + removed + ' ad(s)');
-      }
+      checkAndRemoveAds();
     }
   });
   
@@ -75,7 +97,7 @@
   if (document.documentElement) {
     observer.observe(document.documentElement, {
       childList: true,
-      subtree: true,
+      subtree: true, // Required for early injection to catch all ads
     });
   }
   

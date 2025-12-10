@@ -284,6 +284,11 @@
         margin-bottom: 12px;
       }
 
+      .license-hint strong {
+        color: #e0e0e0;
+        font-size: 13px;
+      }
+
       .license-form {
         display: flex;
         flex-direction: column;
@@ -401,6 +406,68 @@
         box-shadow: 0 6px 12px rgba(102, 126, 234, 0.5);
         transform: translateY(-2px);
       }
+
+      /* Theme Selector */
+      .theme-section {
+        margin-top: 16px;
+        padding-top: 16px;
+        border-top: 2px solid #1a1a1a;
+      }
+
+      .theme-title {
+        font-size: 14px;
+        font-weight: 600;
+        color: #e0e0e0;
+        margin-bottom: 12px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+
+      .theme-grid {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 8px;
+      }
+
+      .theme-option {
+        padding: 10px;
+        border-radius: 8px;
+        border: 2px solid #1a1a1a;
+        cursor: pointer;
+        transition: all 0.3s ease;
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+      }
+
+      .theme-option:hover {
+        border-color: #444;
+      }
+
+      .theme-option.active {
+        border-color: var(--theme-primary, #667eea);
+        background: rgba(102, 126, 234, 0.1);
+      }
+
+      .theme-name {
+        font-size: 12px;
+        font-weight: 600;
+        color: #e0e0e0;
+      }
+
+      .theme-preview {
+        display: flex;
+        gap: 4px;
+        align-items: center;
+      }
+
+      .theme-color {
+        width: 20px;
+        height: 20px;
+        border-radius: 4px;
+        border: 1px solid rgba(255, 255, 255, 0.2);
+      }
     </style>
   </head>
   <body>
@@ -492,6 +559,60 @@
 
       <hr class="section-divider" />
 
+      <!-- Section Thème -->
+      <div class="theme-section">
+        <div class="theme-title">
+          <span>🎨</span>
+          <span>Thème de couleur</span>
+        </div>
+        <div class="theme-grid">
+          <div class="theme-option" data-theme="default">
+            <div class="theme-name">Violet</div>
+            <div class="theme-preview">
+              <div class="theme-color" style="background: #667eea"></div>
+              <div class="theme-color" style="background: #764ba2"></div>
+            </div>
+          </div>
+          <div class="theme-option" data-theme="blue">
+            <div class="theme-name">Bleu</div>
+            <div class="theme-preview">
+              <div class="theme-color" style="background: #4facfe"></div>
+              <div class="theme-color" style="background: #00f2fe"></div>
+            </div>
+          </div>
+          <div class="theme-option" data-theme="green">
+            <div class="theme-name">Vert</div>
+            <div class="theme-preview">
+              <div class="theme-color" style="background: #43e97b"></div>
+              <div class="theme-color" style="background: #38f9d7"></div>
+            </div>
+          </div>
+          <div class="theme-option" data-theme="pink">
+            <div class="theme-name">Rose</div>
+            <div class="theme-preview">
+              <div class="theme-color" style="background: #f857a6"></div>
+              <div class="theme-color" style="background: #ff5858"></div>
+            </div>
+          </div>
+          <div class="theme-option" data-theme="orange">
+            <div class="theme-name">Orange</div>
+            <div class="theme-preview">
+              <div class="theme-color" style="background: #fa709a"></div>
+              <div class="theme-color" style="background: #fee140"></div>
+            </div>
+          </div>
+          <div class="theme-option" data-theme="dark">
+            <div class="theme-name">Sombre</div>
+            <div class="theme-preview">
+              <div class="theme-color" style="background: #434343"></div>
+              <div class="theme-color" style="background: #000000"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <hr class="section-divider" />
+
       <!-- Section Authentification (affichée si non connecté) -->
       <div id="auth-section" class="auth-section">
         <div class="auth-title">🔐 Connexion requise</div>
@@ -541,10 +662,6 @@
 
         <!-- Formulaire d'activation (affiché si pas de licence) -->
         <div id="license-form-container" style="display: none">
-          <div class="license-hint">
-            Entrez votre clé de licence fournie par votre agence pour débloquer
-            l'extension.
-          </div>
           <div class="license-form">
             <input
               type="text"

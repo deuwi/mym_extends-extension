@@ -16,6 +16,10 @@
   let lastInjectionTime = 0;
   const INJECTION_COOLDOWN = 2000; // 2 secondes entre chaque injection
 
+  // Use shared utilities from API
+  const debounce = contentAPI.debounce;
+  const SELECTORS = contentAPI.SELECTORS;
+
   // ========================================
   // MAKE CLONED ROW CLICKABLE
   // ========================================
@@ -122,12 +126,29 @@
     const searchIcon = document.createElement("span");
     searchIcon.className = "searchbar__icon";
     searchIcon.setAttribute("aria-hidden", "true");
-    searchIcon.innerHTML = `
-      <svg width="21" height="20" viewBox="0 0 21 20" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <path fill-rule="evenodd" clip-rule="evenodd" d="M9.63966 3.37143C6.45395 3.37143 3.87143 5.95396 3.87143 9.13967C3.87143 12.3254 6.45395 14.9079 9.63966 14.9079C12.8254 14.9079 15.4079 12.3254 15.4079 9.13967C15.4079 5.95396 12.8254 3.37143 9.63966 3.37143ZM2.5 9.13967C2.5 5.19654 5.69653 2 9.63966 2C13.5828 2 16.7793 5.19654 16.7793 9.13967C16.7793 13.0828 13.5828 16.2793 9.63966 16.2793C5.69653 16.2793 2.5 13.0828 2.5 9.13967Z" fill="#EDEEF0"/>
-        <path fill-rule="evenodd" clip-rule="evenodd" d="M13.718 13.218C13.9858 12.9502 14.4199 12.9502 14.6877 13.218L18.2992 16.8294C18.5669 17.0972 18.5669 17.5314 18.2992 17.7992C18.0314 18.067 17.5972 18.067 17.3294 17.7992L13.718 14.1878C13.4502 13.92 13.4502 13.4858 13.718 13.218Z" fill="#EDEEF0"/>
-      </svg>
-    `;
+    
+    // Créer le SVG de manière sécurisée
+    const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+    svg.setAttribute("width", "21");
+    svg.setAttribute("height", "20");
+    svg.setAttribute("viewBox", "0 0 21 20");
+    svg.setAttribute("fill", "none");
+    
+    const path1 = document.createElementNS("http://www.w3.org/2000/svg", "path");
+    path1.setAttribute("fill-rule", "evenodd");
+    path1.setAttribute("clip-rule", "evenodd");
+    path1.setAttribute("d", "M9.63966 3.37143C6.45395 3.37143 3.87143 5.95396 3.87143 9.13967C3.87143 12.3254 6.45395 14.9079 9.63966 14.9079C12.8254 14.9079 15.4079 12.3254 15.4079 9.13967C15.4079 5.95396 12.8254 3.37143 9.63966 3.37143ZM2.5 9.13967C2.5 5.19654 5.69653 2 9.63966 2C13.5828 2 16.7793 5.19654 16.7793 9.13967C16.7793 13.0828 13.5828 16.2793 9.63966 16.2793C5.69653 16.2793 2.5 13.0828 2.5 9.13967Z");
+    path1.setAttribute("fill", "#EDEEF0");
+    
+    const path2 = document.createElementNS("http://www.w3.org/2000/svg", "path");
+    path2.setAttribute("fill-rule", "evenodd");
+    path2.setAttribute("clip-rule", "evenodd");
+    path2.setAttribute("d", "M13.718 13.218C13.9858 12.9502 14.4199 12.9502 14.6877 13.218L18.2992 16.8294C18.5669 17.0972 18.5669 17.5314 18.2992 17.7992C18.0314 18.067 17.5972 18.067 17.3294 17.7992L13.718 14.1878C13.4502 13.92 13.4502 13.4858 13.718 13.218Z");
+    path2.setAttribute("fill", "#EDEEF0");
+    
+    svg.appendChild(path1);
+    svg.appendChild(path2);
+    searchIcon.appendChild(svg);
 
     // Input de recherche
     const searchInput = document.createElement("input");
@@ -220,10 +241,13 @@
     listContainer,
     isSearchResult = false
   ) {
-    // Vider le conteneur
-    listContainer.innerHTML = "";
+    // Si c'est une recherche, vider complètement
+    if (isSearchResult) {
+      listContainer.innerHTML = "";
+    }
 
     if (conversations.length === 0) {
+      listContainer.innerHTML = "";
       const emptyMessage = document.createElement("div");
       emptyMessage.style.cssText = `
         padding: 20px;
@@ -238,17 +262,69 @@
       return;
     }
 
-    // Ajouter les conversations
-    conversations.forEach((row) => {
+    // Créer un Set des IDs de conversations fetchées
+    const fetchedChatIds = new Set();
+    conversations.forEach(row => {
+      const link = row.querySelector('a[href*="/app/chat/"]');
+      if (link) {
+        const href = link.getAttribute("href");
+        const match = href?.match(/\/app\/chat\/(\d+)/);
+        if (match) {
+          fetchedChatIds.add(match[1]);
+        }
+      }
+    });
+
+    // Récupérer les IDs des conversations déjà affichées
+    const existingRows = listContainer.querySelectorAll('.list__row');
+    const existingChatIds = new Set();
+    
+    existingRows.forEach(row => {
+      const link = row.querySelector('a[href*="/app/chat/"]');
+      if (link) {
+        const href = link.getAttribute("href") || link.href;
+        const match = href?.match(/\/app\/chat\/(\d+)/);
+        if (match) {
+          const chatId = match[1];
+          existingChatIds.add(chatId);
+          
+          // Si la conversation n'est plus dans la liste fetchée, la retirer
+          if (!fetchedChatIds.has(chatId) && !isSearchResult) {
+            console.log(`🗑️ [MYM Conversations] Removing conversation ${chatId} (no longer in list)`);
+            row.remove();
+          }
+        }
+      }
+    });
+
+    let newConversationsAdded = 0;
+
+    // Parcourir les conversations en ordre inverse pour que les plus récentes soient en haut
+    for (let i = conversations.length - 1; i >= 0; i--) {
+      const row = conversations[i];
+      const link = row.querySelector('a[href*="/app/chat/"]');
+      if (!link) continue;
+
+      const href = link.getAttribute("href");
+      const match = href?.match(/\/app\/chat\/(\d+)/);
+      if (!match) continue;
+
+      const chatId = match[1];
+
+      // Si la conversation existe déjà, ne pas la réinjecter
+      if (existingChatIds.has(chatId) && !isSearchResult) {
+        continue;
+      }
+
       // Cloner le row
       const clonedRow = row.cloneNode(true);
 
       // S'assurer que le lien fonctionne
-      const link = clonedRow.querySelector('a[href*="/app/chat/"]');
-      if (link) {
-        const href = link.getAttribute("href");
-        if (!href.startsWith("http")) {
-          link.href = "https://creators.mym.fans" + href;
+      const clonedLink = clonedRow.querySelector('a[href*="/app/chat/"]');
+      if (clonedLink) {
+        const clonedHref = clonedLink.getAttribute("href");
+        if (!clonedHref.startsWith("http")) {
+          clonedLink.href = "https://creators.mym.fans" + clonedHref;
         }
       }
 
@@ -258,9 +334,8 @@
         ".nickname_profile .js-nickname-placeholder"
       );
 
-      if (rightSection && nicknameElement && link) {
+      if (rightSection && nicknameElement && clonedLink) {
         const username = nicknameElement.textContent.trim();
-        const chatId = link.getAttribute("data-id");
 
         // Vérifier si le bouton Notes n'existe pas déjà
         if (!rightSection.querySelector(".mym-notes-button")) {
@@ -282,8 +357,7 @@
             transition: all 0.2s;
           `;
 
-          notesBtn.innerHTML =
-            '<span class="button__icon" style="font-size: 18px; line-height: 1;">📝</span>';
+          notesBtn.textContent = "📝";
 
           // Ajouter les effets hover
           notesBtn.addEventListener("mouseenter", () => {
@@ -307,15 +381,27 @@
           };
 
           // Insérer avant le lien de navigation
-          rightSection.insertBefore(notesBtn, link);
+          rightSection.insertBefore(notesBtn, clonedLink);
         }
       }
 
       // Make the cloned row clickable
       makeClonedRowClickable(clonedRow);
 
-      listContainer.appendChild(clonedRow);
-    });
+      // Insérer au début de la liste (nouvelles conversations en haut)
+      if (listContainer.firstChild) {
+        listContainer.insertBefore(clonedRow, listContainer.firstChild);
+      } else {
+        listContainer.appendChild(clonedRow);
+      }
+      
+      newConversationsAdded++;
+    }
+
+    // Log du nombre de nouvelles conversations ajoutées
+    if (newConversationsAdded > 0 && !isSearchResult) {
+      console.log(`✨ [MYM Conversations] ${newConversationsAdded} nouvelle(s) conversation(s) ajoutée(s)`);
+    }
 
     // Scanner les badges après le rendu
     setTimeout(() => {
@@ -383,7 +469,36 @@
       overflow-x: hidden;
       max-height: calc(100vh - 400px);
       padding: 10px 0;
+      direction: rtl;
+      scrollbar-width: thin;
+      scrollbar-color: linear-gradient(135deg, #667eea 0%, #764ba2 100%) #1a1d2e;
     `;
+    
+    // Ajouter les styles de scrollbar pour WebKit (Chrome, Edge, Safari)
+    contentAPI.injectStyles('mym-conversations-scrollbar-style', `
+      .mym-conversations-list-content {
+        direction: rtl;
+      }
+      .mym-conversations-list-content > * {
+        direction: ltr;
+      }
+      .mym-conversations-list-content::-webkit-scrollbar {
+        width: 8px;
+      }
+      .mym-conversations-list-content::-webkit-scrollbar-track {
+        background: #1a1d2e;
+        border-radius: 4px;
+      }
+      .mym-conversations-list-content::-webkit-scrollbar-thumb {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        border-radius: 4px;
+        transition: all 0.2s;
+      }
+      .mym-conversations-list-content::-webkit-scrollbar-thumb:hover {
+        background: linear-gradient(135deg, #764ba2 0%, #667eea 100%);
+        box-shadow: 0 0 6px rgba(102, 126, 234, 0.5);
+      }
+    `);
 
     // Ajouter la barre de recherche
     const searchBar = createSearchBar(async (searchQuery) => {
@@ -494,19 +609,19 @@
       }
     };
 
-    // Observer le DOM pour détecter les changements de page (SPA)
-    const observer = new MutationObserver(checkUrlChange);
+    // Observer le DOM pour détecter les changements de page (SPA) avec debounce
+    const debouncedCheckUrl = debounce(checkUrlChange, 300);
+    const observer = new MutationObserver(debouncedCheckUrl);
     observer.observe(document.body, {
       childList: true,
-      subtree: true,
+      subtree: false, // Limit to direct children for performance
     });
 
-    // Aussi surveiller les clics
-    document.addEventListener("click", () => {
-      setTimeout(checkUrlChange, 500);
-    });
+    // Aussi surveiller les clics avec debounce
+    const debouncedClickCheck = debounce(checkUrlChange, 500);
+    document.addEventListener("click", debouncedClickCheck);
 
-    // Et le popstate
+    // Et le popstate (pas de debounce pour event navigateur)
     window.addEventListener("popstate", checkUrlChange);
   }
 
@@ -519,16 +634,15 @@
     // Retirer le footer immédiatement (sur toutes les pages)
     setTimeout(removeSidebarFooter, 500);
 
-    // Observer pour retirer le footer s'il réapparaît
-    const footerObserver = new MutationObserver(() => {
-      removeSidebarFooter();
-    });
+    // Observer pour retirer le footer s'il réapparaît avec debounce
+    const debouncedRemoveFooter = debounce(removeSidebarFooter, 200);
+    const footerObserver = new MutationObserver(debouncedRemoveFooter);
 
     const aside = document.querySelector("aside.sidebar");
     if (aside) {
       footerObserver.observe(aside, {
         childList: true,
-        subtree: true,
+        subtree: false, // Direct children only for better performance
       });
     }
 
@@ -557,8 +671,8 @@
       // Récupérer les conversations à jour
       const conversations = await fetchConversationsList(searchQuery);
       
-      // Re-rendre la liste sans effacer le conteneur principal
-      renderConversationsList(conversations, listContainer, !!searchQuery);
+      // Re-rendre la liste (injecte uniquement les nouvelles si pas de recherche)
+      renderConversationsList(conversations, listContainer, searchQuery !== "");
       
       // Mettre à jour le compteur dans le titre
       const title = document.querySelector(".mym-conversations-list > div:nth-child(2)");
