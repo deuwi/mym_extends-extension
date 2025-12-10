@@ -129,7 +129,7 @@
       right: 20px;
       top: 80px;
       width: 320px;
-      background: linear-gradient(135deg, ${window.APP_CONFIG.PRIMARY_GRADIENT_START} 0%, ${window.APP_CONFIG.PRIMARY_GRADIENT_END} 100%);
+      background: ${getComputedStyle(document.documentElement).getPropertyValue('--mym-theme-gradient').trim() || `linear-gradient(135deg, ${window.APP_CONFIG.PRIMARY_GRADIENT_START} 0%, ${window.APP_CONFIG.PRIMARY_GRADIENT_END} 100%)`};
       border: none;
       border-radius: 12px;
       box-shadow: 0 4px 12px rgba(0,0,0,0.25);
@@ -350,7 +350,7 @@
 
     const editor = document.createElement("div");
     editor.style.cssText = `
-      background: linear-gradient(135deg, ${window.APP_CONFIG.PRIMARY_GRADIENT_START} 0%, ${window.APP_CONFIG.PRIMARY_GRADIENT_END} 100%);
+      background: ${getComputedStyle(document.documentElement).getPropertyValue('--mym-theme-gradient').trim() || `linear-gradient(135deg, ${window.APP_CONFIG.PRIMARY_GRADIENT_START} 0%, ${window.APP_CONFIG.PRIMARY_GRADIENT_END} 100%)`};
       border-radius: 12px;
       padding: 20px;
       width: 500px;
@@ -673,7 +673,7 @@
       button.type = "button";
       button.title = "Ouvrir les notes pour cet utilisateur";
       button.style.cssText = `
-        background: linear-gradient(135deg, ${window.APP_CONFIG.PRIMARY_GRADIENT_START} 0%, ${window.APP_CONFIG.PRIMARY_GRADIENT_END} 100%);
+        background: ${getComputedStyle(document.documentElement).getPropertyValue('--mym-theme-gradient').trim() || `linear-gradient(135deg, ${window.APP_CONFIG.PRIMARY_GRADIENT_START} 0%, ${window.APP_CONFIG.PRIMARY_GRADIENT_END} 100%)`};
         border: none;
         border-radius: 50%;
         color: white;
@@ -770,7 +770,7 @@
       button.textContent = "📝 Notes";
       button.title = "Ouvrir les notes pour cet utilisateur";
       button.style.cssText = `
-        background: linear-gradient(135deg, ${window.APP_CONFIG.PRIMARY_GRADIENT_START} 0%, ${window.APP_CONFIG.PRIMARY_GRADIENT_END} 100%);
+        background: ${getComputedStyle(document.documentElement).getPropertyValue('--mym-theme-gradient').trim() || `linear-gradient(135deg, ${window.APP_CONFIG.PRIMARY_GRADIENT_START} 0%, ${window.APP_CONFIG.PRIMARY_GRADIENT_END} 100%)`};
         border: none;
         padding: 8px 16px;
         border-radius: 8px;

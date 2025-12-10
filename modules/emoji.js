@@ -997,7 +997,7 @@
       width: 100%;
       max-width: 300px;
       max-height: 300px;
-      background: linear-gradient(135deg, ${window.APP_CONFIG.PRIMARY_GRADIENT_START} 0%, ${window.APP_CONFIG.PRIMARY_GRADIENT_END} 100%);
+      background: ${getComputedStyle(document.documentElement).getPropertyValue('--mym-theme-gradient').trim() || `linear-gradient(135deg, ${window.APP_CONFIG.PRIMARY_GRADIENT_START} 0%, ${window.APP_CONFIG.PRIMARY_GRADIENT_END} 100%)`};
       border: 1px solid #ccc;
       border-radius: 12px;
       box-shadow: 0 4px 12px rgba(0,0,0,0.15);
@@ -1043,7 +1043,7 @@
     frequentSection.style.cssText = `
       padding: 12px;
       border-top: 1px solid ${window.APP_CONFIG.BORDER_LIGHT};
-      background: linear-gradient(135deg, ${window.APP_CONFIG.PRIMARY_GRADIENT_START} 0%, ${window.APP_CONFIG.PRIMARY_GRADIENT_END} 100%);
+      background: ${getComputedStyle(document.documentElement).getPropertyValue('--mym-theme-gradient').trim() || `linear-gradient(135deg, ${window.APP_CONFIG.PRIMARY_GRADIENT_START} 0%, ${window.APP_CONFIG.PRIMARY_GRADIENT_END} 100%)`};
       display: ${frequentEmojis.length > 0 ? 'block' : 'none'};
     `;
 
@@ -1255,7 +1255,7 @@
       position: absolute;
       right: 8px;
       bottom: 8px;
-      background: linear-gradient(135deg, ${window.APP_CONFIG.PRIMARY_GRADIENT_START} 0%, ${window.APP_CONFIG.PRIMARY_GRADIENT_END} 100%);
+      background: ${getComputedStyle(document.documentElement).getPropertyValue('--mym-theme-gradient').trim() || `linear-gradient(135deg, ${window.APP_CONFIG.PRIMARY_GRADIENT_START} 0%, ${window.APP_CONFIG.PRIMARY_GRADIENT_END} 100%)`};
       border: none;
       border-radius: 50%;
       width: 36px;
