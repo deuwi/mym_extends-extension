@@ -744,13 +744,19 @@
         const themeName = data.user_theme || "default";
         // Injecter dans le localStorage de la page
         try {
+          const oldValue = window.localStorage.getItem("user_theme");
           window.localStorage.setItem("user_theme", themeName);
-          // Déclencher un événement storage pour que React détecte le changement
-          window.dispatchEvent(new StorageEvent('storage', {
-            key: 'user_theme',
-            newValue: themeName,
-            url: window.location.href
+          
+          // Déclencher un événement personnalisé que React peut écouter
+          // (StorageEvent ne fonctionne pas dans le même onglet)
+          window.dispatchEvent(new CustomEvent('themeChange', {
+            detail: { themeName, oldValue, newValue: themeName }
           }));
+          
+          // Forcer un refresh en modifiant directement les CSS variables
+          document.documentElement.style.setProperty("--gradient-primary", THEMES[themeName]?.gradient || THEMES.default.gradient);
+          document.documentElement.style.setProperty("--primary-color", THEMES[themeName]?.primary || THEMES.default.primary);
+          document.documentElement.style.setProperty("--secondary-color", THEMES[themeName]?.secondary || THEMES.default.secondary);
         } catch (e) {
           console.error("Erreur lors de la synchronisation du thème:", e);
         }
@@ -858,12 +864,23 @@
 
     const theme = THEMES[themeName] || THEMES.default;
     applyThemeToPage(theme);
-    
+
     // Synchroniser immédiatement avec le localStorage du frontend
     if (window.location.hostname === 'mymchat.fr' || window.location.hostname === 'localhost') {
       try {
+        const oldValue = window.localStorage.getItem("user_theme");
         window.localStorage.setItem("user_theme", themeName);
         console.log(`🎨 [MYM] Thème "${themeName}" synchronisé avec le frontend`);
+        
+        // Déclencher événement personnalisé pour React
+        window.dispatchEvent(new CustomEvent('themeChange', {
+          detail: { themeName, oldValue, newValue: themeName }
+        }));
+        
+        // Forcer application directe des CSS variables
+        document.documentElement.style.setProperty("--gradient-primary", theme.gradient);
+        document.documentElement.style.setProperty("--primary-color", theme.primary);
+        document.documentElement.style.setProperty("--secondary-color", theme.secondary);
       } catch (e) {
         console.error("Erreur lors de la synchronisation initiale du thème:", e);
       }
