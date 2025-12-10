@@ -751,11 +751,11 @@
       userInfoBox.style.background = gradient;
     }
     
-    // Mettre à jour le bouton emoji
-    const emojiButton = document.querySelector(".mym-emoji-trigger");
-    if (emojiButton) {
-      emojiButton.style.background = gradient;
-    }
+    // Mettre à jour tous les boutons emoji
+    const emojiButtons = document.querySelectorAll(".mym-emoji-trigger, .mym-emoji-btn");
+    emojiButtons.forEach(button => {
+      button.style.background = gradient;
+    });
     
     // Mettre à jour le picker emoji
     const emojiPicker = document.getElementById("mym-emoji-picker");
