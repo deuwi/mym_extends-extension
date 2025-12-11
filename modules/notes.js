@@ -674,7 +674,7 @@
       button.title = "Ouvrir les notes pour cet utilisateur";
       button.style.cssText = `
         background: ${getComputedStyle(document.documentElement).getPropertyValue('--mym-theme-gradient').trim() || `linear-gradient(135deg, ${window.APP_CONFIG.PRIMARY_GRADIENT_START} 0%, ${window.APP_CONFIG.PRIMARY_GRADIENT_END} 100%)`};
-        border: none;
+        border: 2px solid #3b82f6;
         border-radius: 50%;
         color: white;
         cursor: pointer;

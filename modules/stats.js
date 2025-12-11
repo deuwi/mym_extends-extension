@@ -45,6 +45,7 @@
           margin-bottom: 8px;
           color: white;
           box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+          border: 2px solid #3b82f6;
         `;
 
         const sidebarSection = document.querySelector(".sidebar__section");

@@ -223,6 +223,31 @@
         cursor: not-allowed;
       }
 
+      .features-control {
+        background: rgba(139, 155, 255, 0.1);
+        border-radius: 8px;
+        padding: 12px;
+        margin-bottom: 12px;
+      }
+
+      .features-control-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+      }
+
+      .features-control-label {
+        font-weight: 600;
+        font-size: 14px;
+        color: #e0e0e0;
+      }
+
+      .features-control-hint {
+        font-size: 11px;
+        color: #888;
+        margin-top: 4px;
+      }
+
       .btn-logout {
         width: 100%;
         padding: 8px 16px;
@@ -506,92 +531,27 @@
             <span>Renouveler mon abonnement</span>
           </a>
         </div>
+        <div class="features-control">
+          <div class="features-control-row">
+            <div>
+              <div class="features-control-label">Toutes les fonctionnalités</div>
+              <div class="features-control-hint">Activer/Désactiver tout</div>
+            </div>
+            <div
+              id="toggle-all-features"
+              class="toggle on"
+              role="button"
+              tabindex="0"
+              aria-label="Toggle All Features"
+            >
+              <div class="knob"></div>
+            </div>
+          </div>
+        </div>
         <button id="logoutBtn" class="btn-logout">Déconnexion</button>
       </div>
 
-      <hr class="section-divider" />
 
-      <div class="row">
-        <div>
-          <div class="label">Chat Live</div>
-          <div class="hint">Injection automatique des messages</div>
-        </div>
-        <div
-          id="toggle"
-          class="toggle"
-          role="button"
-          tabindex="0"
-          aria-label="Toggle MYM Live"
-        >
-          <div class="knob"></div>
-        </div>
-      </div>
-
-      <div class="row">
-        <div>
-          <div class="label">Badges de revenus</div>
-          <div class="hint">Afficher les montants totaux</div>
-        </div>
-        <div
-          id="toggle-badges"
-          class="toggle"
-          role="button"
-          tabindex="0"
-          aria-label="Toggle Badges"
-        >
-          <div class="knob"></div>
-        </div>
-      </div>
-
-      <div class="row">
-        <div>
-          <div class="label">Statistiques détaillées</div>
-          <div class="hint">Revenus, messages et engagement en temps réel</div>
-        </div>
-        <div
-          id="toggle-stats"
-          class="toggle"
-          role="button"
-          tabindex="0"
-          aria-label="Toggle Statistics Box"
-        >
-          <div class="knob"></div>
-        </div>
-      </div>
-
-      <div class="row">
-        <div>
-          <div class="label">Picker d'émojis</div>
-          <div class="hint">Sélecteur d'émojis rapide</div>
-        </div>
-        <div
-          id="toggle-emoji"
-          class="toggle"
-          role="button"
-          tabindex="0"
-          aria-label="Toggle Emoji Picker"
-        >
-          <div class="knob"></div>
-        </div>
-      </div>
-
-      <div class="row">
-        <div>
-          <div class="label">Notes utilisateur</div>
-          <div class="hint">Prendre des notes sur vos fans</div>
-        </div>
-        <div
-          id="toggle-notes"
-          class="toggle"
-          role="button"
-          tabindex="0"
-          aria-label="Toggle User Notes"
-        >
-          <div class="knob"></div>
-        </div>
-      </div>
-
-      <hr class="section-divider" />
 
       <!-- Section Thème -->
       <div class="theme-section">
@@ -619,31 +579,6 @@
 
       <hr class="section-divider" />
 
-      <!-- Section Thème -->
-      <div class="theme-section">
-        <div class="theme-title">
-          <span>🎨</span>
-          <span>Thème de couleur</span>
-        </div>
-        <div class="theme-grid">
-          <div class="theme-option" data-theme="default">
-            <div class="theme-name">Violet</div>
-            <div class="theme-preview">
-              <div class="theme-color" style="background: #667eea"></div>
-              <div class="theme-color" style="background: #764ba2"></div>
-            </div>
-          </div>
-          <div class="theme-option" data-theme="dark">
-            <div class="theme-name">Sombre</div>
-            <div class="theme-preview">
-              <div class="theme-color" style="background: #434343"></div>
-              <div class="theme-color" style="background: #000000"></div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <hr class="section-divider" />
 
       <!-- Lien vers le site web -->
       <div class="link-container">

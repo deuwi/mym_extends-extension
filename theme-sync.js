@@ -39,9 +39,14 @@
     },
     dark: {
       name: "Sombre",
-      primary: "#434343",
-      secondary: "#000000",
-      gradient: "linear-gradient(135deg, #434343 0%, #000000 100%)",
+      primary: "#8b9bff",
+      secondary: "#9b7bd5",
+      gradient: "linear-gradient(135deg, #8b9bff 0%, #9b7bd5 100%)",
+      background: "#0a0b0e",
+      textColor: "#e5e7eb",
+      textSecondary: "#9ca3af",
+      cardBackground: "#1a1d29",
+      borderColor: "#2a2d3a",
     },
   };
 
@@ -59,6 +64,42 @@
     document.documentElement.style.setProperty("--gradient-primary", theme.gradient);
     document.documentElement.style.setProperty("--primary-color", theme.primary);
     document.documentElement.style.setProperty("--secondary-color", theme.secondary);
+
+    // Appliquer le fond si le thème a une couleur de fond spécifique (dark mode)
+    if (theme.background) {
+      document.documentElement.style.setProperty("--background-color", theme.background);
+      document.body.style.backgroundColor = theme.background;
+      document.body.classList.add("dark-theme");
+    } else {
+      document.documentElement.style.removeProperty("--background-color");
+      document.body.style.backgroundColor = "";
+      document.body.classList.remove("dark-theme");
+    }
+
+    // Appliquer les couleurs de texte pour le dark mode
+    if (theme.textColor) {
+      document.documentElement.style.setProperty("--text-color", theme.textColor);
+    } else {
+      document.documentElement.style.setProperty("--text-color", "#333");
+    }
+
+    if (theme.textSecondary) {
+      document.documentElement.style.setProperty("--text-secondary", theme.textSecondary);
+    } else {
+      document.documentElement.style.setProperty("--text-secondary", "#666");
+    }
+
+    if (theme.cardBackground) {
+      document.documentElement.style.setProperty("--card-background", theme.cardBackground);
+    } else {
+      document.documentElement.style.setProperty("--card-background", "white");
+    }
+
+    if (theme.borderColor) {
+      document.documentElement.style.setProperty("--border-color", theme.borderColor);
+    } else {
+      document.documentElement.style.setProperty("--border-color", "#e5e7eb");
+    }
 
     // Déclencher événement personnalisé pour React
     window.dispatchEvent(new CustomEvent('themeChange', {

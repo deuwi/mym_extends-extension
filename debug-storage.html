@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>🔍 Debug Storage - MYM Extension</title>
+  <style>
+    body {
+      font-family: system-ui, -apple-system, sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      padding: 20px;
+    }
+    .container {
+      max-width: 800px;
+      margin: 0 auto;
+      background: rgba(0, 0, 0, 0.3);
+      padding: 24px;
+      border-radius: 12px;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.3);
+    }
+    h1 { margin-top: 0; }
+    button {
+      background: rgba(255, 255, 255, 0.2);
+      border: none;
+      border-radius: 8px;
+      padding: 12px 24px;
+      color: white;
+      cursor: pointer;
+      font-size: 16px;
+      margin-right: 12px;
+      margin-bottom: 12px;
+    }
+    button:hover {
+      background: rgba(255, 255, 255, 0.3);
+    }
+    pre {
+      background: rgba(0, 0, 0, 0.5);
+      padding: 16px;
+      border-radius: 8px;
+      overflow-x: auto;
+      white-space: pre-wrap;
+      word-wrap: break-word;
+      max-height: 600px;
+      overflow-y: auto;
+    }
+    .status {
+      padding: 12px;
+      border-radius: 8px;
+      margin-bottom: 16px;
+    }
+    .success { background: rgba(76, 175, 80, 0.3); }
+    .error { background: rgba(244, 67, 54, 0.3); }
+    .info { background: rgba(33, 150, 243, 0.3); }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>🔍 Debug Storage - MYM Extension</h1>
+    
+    <div id="status"></div>
+    
+    <div>
+      <button onclick="checkNotes()">📝 Vérifier Notes</button>
+      <button onclick="checkAll()">📦 Voir Tout le Storage</button>
+      <button onclick="exportNotes()">💾 Exporter Notes</button>
+      <button onclick="clearNotes()">🗑️ Effacer Notes (test)</button>
+    </div>
+
+    <pre id="output">Cliquez sur un bouton pour commencer...</pre>
+  </div>
+
+  <script>
+    const output = document.getElementById('output');
+    const status = document.getElementById('status');
+
+    function showStatus(message, type = 'info') {
+      status.className = `status ${type}`;
+      status.textContent = message;
+    }
+
+    function log(message) {
+      output.textContent = message;
+    }
+
+    async function checkNotes() {
+      try {
+        showStatus('🔍 Vérification des notes...', 'info');
+        
+        const data = await chrome.storage.sync.get(['notes_data']);
+        const notesData = data.notes_data || {};
+        
+        const count = Object.keys(notesData).length;
+        let result = `📊 Statistiques:\n`;
+        result += `   - ${count} utilisateur(s) avec des notes\n\n`;
+        
+        if (count > 0) {
+          result += `📝 Détails des notes:\n\n`;
+          for (const [key, value] of Object.entries(notesData)) {
+            const preview = value.length > 100 
+              ? value.substring(0, 100) + '...' 
+              : value;
+            result += `🔹 ${key}:\n`;
+            result += `   Longueur: ${value.length} caractères\n`;
+            result += `   Aperçu: ${preview}\n\n`;
+          }
+        } else {
+          result += `⚠️ Aucune note trouvée\n`;
+          result += `   Cela signifie soit:\n`;
+          result += `   - Vous n'avez jamais créé de notes\n`;
+          result += `   - Les notes ont été effacées\n`;
+        }
+        
+        log(result);
+        showStatus(`✅ ${count} note(s) trouvée(s)`, 'success');
+      } catch (error) {
+        log(`❌ Erreur: ${error.message}\n\n${error.stack}`);
+        showStatus('❌ Erreur lors de la vérification', 'error');
+      }
+    }
+
+    async function checkAll() {
+      try {
+        showStatus('🔍 Chargement de tout le storage...', 'info');
+        
+        const sync = await chrome.storage.sync.get(null);
+        const local = await chrome.storage.local.get(null);
+        
+        let result = `📦 STORAGE SYNC (synchronisé entre appareils):\n`;
+        result += JSON.stringify(sync, null, 2);
+        result += `\n\n📦 STORAGE LOCAL (seulement cet appareil):\n`;
+        result += JSON.stringify(local, null, 2);
+        
+        log(result);
+        showStatus('✅ Storage chargé avec succès', 'success');
+      } catch (error) {
+        log(`❌ Erreur: ${error.message}\n\n${error.stack}`);
+        showStatus('❌ Erreur lors du chargement', 'error');
+      }
+    }
+
+    async function exportNotes() {
+      try {
+        showStatus('💾 Export des notes...', 'info');
+        
+        const data = await chrome.storage.sync.get(['notes_data']);
+        const notesData = data.notes_data || {};
+        
+        const json = JSON.stringify(notesData, null, 2);
+        const blob = new Blob([json], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `mym-notes-backup-${new Date().toISOString().split('T')[0]}.json`;
+        a.click();
+        
+        URL.revokeObjectURL(url);
+        
+        log(`✅ Notes exportées avec succès!\n\n${json}`);
+        showStatus('✅ Notes exportées!', 'success');
+      } catch (error) {
+        log(`❌ Erreur: ${error.message}\n\n${error.stack}`);
+        showStatus('❌ Erreur lors de l\'export', 'error');
+      }
+    }
+
+    async function clearNotes() {
+      if (!confirm('⚠️ Êtes-vous sûr de vouloir effacer toutes les notes?\n\nCette action est irréversible!')) {
+        return;
+      }
+      
+      try {
+        showStatus('🗑️ Effacement des notes...', 'info');
+        
+        await chrome.storage.sync.remove(['notes_data']);
+        
+        log('✅ Toutes les notes ont été effacées');
+        showStatus('✅ Notes effacées', 'success');
+      } catch (error) {
+        log(`❌ Erreur: ${error.message}\n\n${error.stack}`);
+        showStatus('❌ Erreur lors de l\'effacement', 'error');
+      }
+    }
+
+    // Auto-check au chargement
+    checkNotes();
+  </script>
+</body>
+</html>

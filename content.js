@@ -122,12 +122,17 @@
         overflow: hidden !important;
       }
       
-      /* Make followers details scrollable with 50vh height */
+      /* Remove scroll from followers details and add to site-content */
       .followers__details {
-        height: 50vh !important;
-        overflow-y: auto !important;
+        height: auto !important;
+        overflow-y: visible !important;
         width: 100% !important;
         padding: 0 !important;
+      }
+      
+      .site-content {
+        overflow-y: auto !important;
+        max-height: 100vh !important;
       }
       
       /* Mobile responsive - reduce padding bottom on discussions */
@@ -171,7 +176,7 @@
     (window.APP_CONFIG && window.APP_CONFIG.POLL_INTERVAL_MS) || 10000;
   const SUBSCRIPTION_CHECK_INTERVAL =
     (window.APP_CONFIG && window.APP_CONFIG.SUBSCRIPTION_CHECK_INTERVAL) ||
-    60 * 60 * 1000;
+    5 * 60 * 1000; // 5 minutes
   const MAX_PAGES_FETCH =
     (window.APP_CONFIG && window.APP_CONFIG.MAX_PAGES_FETCH) || 10;
 
@@ -284,7 +289,8 @@
   function startSubscriptionMonitoring() {
     if (subscriptionMonitoringInterval) return;
 
-    subscriptionMonitoringInterval = setInterval(async () => {
+    // Fonction de vérification
+    const checkSubscription = async () => {
       if (!chrome.runtime || !chrome.runtime.id) {
         console.warn(
           "[MYM] Extension context invalidated, stopping subscription monitoring"
@@ -294,17 +300,83 @@
       }
 
       try {
-        const token = await contentAPI.safeStorageGet("local", ["access_token"]);
-        if (!token.access_token) return;
-
-        // NOTE: La vérification de l'abonnement est gérée par background.js
+        const data = await contentAPI.safeStorageGet("local", ["firebaseToken", "access_token", "user_email"]);
+        const token = data.firebaseToken || data.access_token;
+        
+        if (!token) return;
+        
+        const headers = { Authorization: `Bearer ${token}` };
+        const res = await fetch(`${contentAPI.API_BASE}/check-subscription`, { headers });
+        
+        if (!res.ok) {
+          if (res.status === 401) {
+            // Token expiré - Vérifier l'abonnement par email avant de désactiver
+            const userEmail = data.user_email;
+            
+            if (userEmail) {
+              try {
+                const emailCheckRes = await fetch(`${contentAPI.API_BASE}/check-subscription`, {
+                  headers: { "X-User-Email": userEmail },
+                });
+                
+                if (emailCheckRes.ok) {
+                  const emailResult = await emailCheckRes.json();
+                  
+                  if (emailResult.subscription_active || emailResult.trial_days_remaining > 0 || emailResult.agency_license_active) {
+                    console.log("✅ [MYM] Abonnement valide via email - fonctionnalités conservées");
+                    return; // Garder les fonctionnalités actives
+                  }
+                }
+              } catch (emailCheckErr) {
+                console.warn("⚠️ [MYM] Erreur vérification par email:", emailCheckErr);
+              }
+            }
+            
+            // Si impossible de vérifier, désactiver
+            console.warn("🔒 [MYM] Token expiré et abonnement non vérifiable - désactivation");
+            await chrome.storage.local.set({
+              mym_live_enabled: false,
+              mym_badges_enabled: false,
+              mym_stats_enabled: false,
+              mym_emoji_enabled: false,
+              mym_notes_enabled: false,
+            });
+            window.location.reload();
+          }
+          return;
+        }
+        
+        const result = await res.json();
+        
+        // Vérifier si l'abonnement est toujours actif
+        const hasAccess = result.subscription_active || 
+                         result.trial_days_remaining > 0 || 
+                         result.agency_license_active;
+        
+        if (!hasAccess) {
+          console.warn("⚠️ [MYM] Abonnement expiré - désactivation des fonctionnalités");
+          await chrome.storage.local.set({
+            mym_live_enabled: false,
+            mym_badges_enabled: false,
+            mym_stats_enabled: false,
+            mym_emoji_enabled: false,
+            mym_notes_enabled: false,
+          });
+          window.location.reload();
+        }
       } catch (err) {
         // Don't log error if extension context is invalidated
         if (err.message !== "Extension context invalidated") {
           console.error("❌ [MYM] Subscription check error:", err);
         }
       }
-    }, SUBSCRIPTION_CHECK_INTERVAL);
+    };
+    
+    // Vérification immédiate au démarrage
+    checkSubscription();
+    
+    // Puis vérification périodique
+    subscriptionMonitoringInterval = setInterval(checkSubscription, SUBSCRIPTION_CHECK_INTERVAL);
   }
 
   function stopSubscriptionMonitoring() {
@@ -652,6 +724,23 @@
       if (message.type === "REFRESH_FIREBASE_TOKEN") {
         (async () => {
           try {
+            // Vérifier si on a déjà un refresh en cours
+            if (window.__mym_refresh_in_progress) {
+              console.log("ℹ️ [MYM] Token refresh already in progress, skipping");
+              return;
+            }
+            
+            // Vérifier le cooldown (1 minute minimum entre chaque refresh)
+            const now = Date.now();
+            const lastRefresh = window.__mym_last_refresh || 0;
+            if (now - lastRefresh < 60000) { // 1 minute
+              console.log(`ℹ️ [MYM] Token refresh en cooldown (${Math.round((60000 - (now - lastRefresh)) / 1000)}s restantes)`);
+              return;
+            }
+            
+            window.__mym_refresh_in_progress = true;
+            window.__mym_last_refresh = now;
+            
             console.log("🔄 [MYM] Proactive Firebase token refresh requested");
             
             // Déclencher le refresh via le site web si on est sur creators.mym.fans
@@ -669,6 +758,11 @@
             }
           } catch (error) {
             console.error("❌ [MYM] Error refreshing token:", error);
+          } finally {
+            // Réinitialiser le flag après 2 secondes
+            setTimeout(() => {
+              window.__mym_refresh_in_progress = false;
+            }, 2000);
           }
         })();
       }
@@ -681,6 +775,41 @@
       if (message.action === "toggleFeature") {
         // Gérer l'activation/désactivation d'une fonctionnalité
         handleFeatureToggle(message.feature, message.enabled);
+      }
+
+      if (message.action === "disableAllFeatures") {
+        // Désactiver toutes les fonctionnalités
+        // // console.log("🔄 [MYM] Disabling all features");
+        
+        // Désactiver les badges
+        contentAPI.badgesEnabled = false;
+        document.querySelectorAll('.mym-total-spent-badge, .mym-category-badge').forEach(el => el.remove());
+        
+        // Désactiver les stats
+        contentAPI.statsEnabled = false;
+        const statsBox = document.getElementById('mym-user-info-box');
+        if (statsBox) statsBox.remove();
+        
+        // Désactiver les emojis
+        contentAPI.emojiEnabled = false;
+        if (contentAPI.emoji && contentAPI.emoji.removeEmojiUI) {
+          contentAPI.emoji.removeEmojiUI();
+        }
+        
+        // Désactiver les notes
+        contentAPI.notesEnabled = false;
+        document.querySelectorAll('.mym-notes-button').forEach(btn => btn.remove());
+        const notesPanel = document.getElementById('mym-notes-panel');
+        if (notesPanel) notesPanel.remove();
+        
+        // Désactiver la liste de conversations
+        const conversationsList = document.querySelector('.mym-conversations-list');
+        if (conversationsList) conversationsList.remove();
+        
+        // Arrêter le polling
+        if (contentAPI.polling) {
+          contentAPI.polling.stopPolling();
+        }
       }
     };
 
@@ -699,9 +828,17 @@
         contentAPI.badgesEnabled = enabled;
         
         if (enabled) {
-          // Activer les badges
-          if (contentAPI.badges && contentAPI.badges.scanExistingListsForBadges) {
-            contentAPI.badges.scanExistingListsForBadges();
+          // Activer les badges - Vider les caches et rescanner
+          if (contentAPI.badges) {
+            if (contentAPI.badges.clearBadgeCaches) {
+              contentAPI.badges.clearBadgeCaches();
+            }
+            // Laisser le DOM se stabiliser avant de scanner
+            setTimeout(() => {
+              if (contentAPI.badges.scanExistingListsForBadges) {
+                contentAPI.badges.scanExistingListsForBadges();
+              }
+            }, 300);
           }
         } else {
           // Désactiver les badges (supprimer tous les badges affichés)
@@ -720,8 +857,8 @@
             contentAPI.stats.injectUserInfoBox(username);
           }
         } else {
-          // Désactiver la box stats
-          const statsBox = document.querySelector('.mym-user-info-box');
+          // Désactiver la box stats (utiliser getElementById car c'est un ID, pas une classe)
+          const statsBox = document.getElementById('mym-user-info-box');
           if (statsBox) statsBox.remove();
         }
         break;
@@ -731,15 +868,22 @@
         contentAPI.emojiEnabled = enabled;
         
         if (enabled) {
-          // Activer le picker emoji
-          if (contentAPI.emoji && contentAPI.emoji.scanAndAttachPickers) {
-            contentAPI.emoji.scanAndAttachPickers();
+          // Activer le picker emoji - Ajouter les boutons à tous les inputs existants
+          if (contentAPI.emoji) {
+            setTimeout(() => {
+              const inputFields = document.querySelectorAll(".input__field");
+              inputFields.forEach((field) => {
+                if (!field.querySelector(".mym-emoji-trigger")) {
+                  contentAPI.emoji.addEmojiButtonToInput(field);
+                }
+              });
+            }, 300);
           }
         } else {
           // Désactiver le picker emoji
-          document.querySelectorAll('.mym-emoji-trigger').forEach(el => el.remove());
-          const picker = document.querySelector('.mym-emoji-picker');
-          if (picker) picker.remove();
+          if (contentAPI.emoji && contentAPI.emoji.removeEmojiUI) {
+            contentAPI.emoji.removeEmojiUI();
+          }
         }
         break;
 
@@ -749,25 +893,41 @@
         
         if (enabled) {
           // Activer les notes
-          if (contentAPI.notes && contentAPI.notes.createNotesButton) {
-            contentAPI.notes.createNotesButton();
-          }
+          setTimeout(() => {
+            // Bouton dans le chat header
+            if (contentAPI.notes && contentAPI.notes.createNotesButton) {
+              contentAPI.notes.createNotesButton();
+            }
+            // Boutons dans la page /app/myms
+            if (contentAPI.notes && contentAPI.notes.injectNotesButtonsInList) {
+              contentAPI.notes.injectNotesButtonsInList();
+            }
+            // Boutons dans la liste de conversations (sidebar)
+            if (contentAPI.conversations && contentAPI.conversations.reinjectNotesButtons) {
+              contentAPI.conversations.reinjectNotesButtons();
+            }
+          }, 300);
         } else {
-          // Désactiver les notes
-          const notesBtn = document.querySelector('.mym-notes-button');
-          if (notesBtn) notesBtn.remove();
-          const notesPanel = document.querySelector('.mym-notes-panel');
+          // Désactiver les notes - Supprimer TOUS les boutons notes
+          document.querySelectorAll('.mym-notes-button').forEach(btn => btn.remove());
+          // Supprimer le panel s'il est ouvert
+          const notesPanel = document.getElementById('mym-notes-panel');
           if (notesPanel) notesPanel.remove();
         }
         break;
 
       case "mym_live_enabled":
         if (enabled) {
-          // Redémarrer le polling
-          startPollingIfNeeded();
+          // Redémarrer le polling si sur page chat
+          const isChatPage = window.location.pathname.startsWith("/app/chat/");
+          if (isChatPage && contentAPI.polling) {
+            contentAPI.polling.startPolling();
+          }
         } else {
           // Arrêter le polling
-          stopPolling();
+          if (contentAPI.polling) {
+            contentAPI.polling.stopPolling();
+          }
         }
         break;
 
@@ -829,7 +989,7 @@
       }
     `;
 
-    console.log(`🎨 [MYM] Thème "${theme.name}" appliqué`);
+    // console.log(`🎨 [MYM] Thème "${theme.name}" appliqué`);
     
     // Synchroniser avec le localStorage de la page pour le frontend React
     if (window.location.hostname === 'mymchat.fr' || window.location.hostname === 'localhost') {
@@ -964,7 +1124,7 @@
       try {
         const oldValue = window.localStorage.getItem("user_theme");
         window.localStorage.setItem("user_theme", themeName);
-        console.log(`🎨 [MYM] Thème "${themeName}" synchronisé avec le frontend`);
+        // console.log(`🎨 [MYM] Thème "${themeName}" synchronisé avec le frontend`);
         
         // Déclencher événement personnalisé pour React
         window.dispatchEvent(new CustomEvent('themeChange', {
@@ -1058,8 +1218,8 @@
       );
 
       if (anyFeatureDisabled) {
-        console.log("⚠️ [MYM] Features disabled by background");
-        console.log("Changes detected:", changes);
+        // console.log("⚠️ [MYM] Features disabled by background");
+        // console.log("Changes detected:", changes);
         
         // NE PLUS recharger automatiquement la page
         // Au lieu de cela, laisser les handlers de cleanup faire leur travail

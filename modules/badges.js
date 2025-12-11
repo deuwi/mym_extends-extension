@@ -230,6 +230,7 @@
         font-weight: 600;
         margin-left: 8px;
         vertical-align: middle;
+        border: 2px solid #3b82f6;
       `;
       badge.textContent = `${totalSpent.toFixed(2)}€`;
       badge.title = `Revenu total de ${username}: ${totalSpent.toFixed(2)}€`;
@@ -298,6 +299,7 @@
       font-weight: 600;
       margin-left: 4px;
       vertical-align: middle;
+      border: 2px solid #3b82f6;
     `;
     badge.textContent = `${config.emoji} ${category}`;
     badge.title = config.label;
@@ -598,6 +600,15 @@
     // console.log(`🧹 [MYM Badges] Removed ${badges.length} badge(s) from DOM`);
   }
 
+  /**
+   * Clear badge caches (useful when re-enabling badges)
+   */
+  function clearBadgeCaches() {
+    totalSpentFetched.clear();
+    userInfoCache.clear();
+    // console.log(`🧹 [MYM Badges] Caches cleared`);
+  }
+
   // Export des fonctions publiques
   contentAPI.badges = {
     fetchUserDetailedInfo,
@@ -605,6 +616,7 @@
     scanExistingListsForBadges,
     scanSingleCard,
     removeBadgesUI,
+    clearBadgeCaches,
   };
 
   // // // // console.log("✅ [MYM Badges] Module loaded");

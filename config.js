@@ -38,9 +38,10 @@ const TIMING_CONFIG = {
 
   // Intervalles de vérification
   POLL_INTERVAL_MS: 10000, // 10 secondes - polling des nouveaux messages
-  SUBSCRIPTION_CHECK_INTERVAL: 30 * 60 * 1000, // 30 minutes - vérification abonnement
+  SUBSCRIPTION_CHECK_INTERVAL: 30 * 60 * 1000, // 30 minutes - vérification abonnement (deprecated - utiliser SUBSCRIPTION_CHECK_INTERVAL_MIN)
+  SUBSCRIPTION_CHECK_INTERVAL_MIN: 30, // 30 minutes - vérification abonnement (pour chrome.alarms)
   LICENSE_CHECK_INTERVAL_MIN: 30, // 30 minutes - vérification licence agence
-  TOKEN_REFRESH_INTERVAL_MIN: 50, // 50 minutes - rafraîchissement token Firebase
+  TOKEN_REFRESH_INTERVAL_MIN: 30, // 30 minutes - rafraîchissement token Firebase (Firebase tokens expire après 1h)
 
   // Cache
   USER_INFO_CACHE_DURATION: 2 * 60 * 1000, // 2 minutes

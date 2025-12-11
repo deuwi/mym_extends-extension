@@ -88,7 +88,9 @@
 
       return Array.from(rows);
     } catch (error) {
-      console.error("❌ [MYM Conversations] Error fetching list:", error);
+      // Erreur fetch silencieuse - peut arriver en cas de problème réseau temporaire
+      // La liste sera rechargée au prochain intervalle (30s)
+      // console.error("❌ [MYM Conversations] Error fetching list:", error);
       return [];
     }
   }
@@ -400,7 +402,7 @@
 
     // Log du nombre de nouvelles conversations ajoutées
     if (newConversationsAdded > 0 && !isSearchResult) {
-      console.log(`✨ [MYM Conversations] ${newConversationsAdded} nouvelle(s) conversation(s) ajoutée(s)`);
+      // console.log(`✨ [MYM Conversations] ${newConversationsAdded} nouvelle(s) conversation(s) ajoutée(s)`);
     }
 
     // Scanner les badges après le rendu
@@ -684,6 +686,71 @@
     }
   }
 
+  /**
+   * Re-inject notes buttons in existing conversation list (used when re-enabling notes)
+   */
+  function reinjectNotesButtons() {
+    if (!contentAPI.notesEnabled) return;
+
+    const listContainer = document.querySelector(".mym-conversations-list-content");
+    if (!listContainer) return;
+
+    const rows = listContainer.querySelectorAll(".list__row");
+    
+    rows.forEach((row) => {
+      const rightSection = row.querySelector(".list__row__right");
+      const nicknameElement = row.querySelector(".nickname_profile .js-nickname-placeholder");
+      const chatLink = row.querySelector('a[href*="/app/chat/"]');
+      
+      if (!rightSection || !nicknameElement || !chatLink) return;
+      
+      // Skip if button already exists
+      if (rightSection.querySelector(".mym-notes-button")) return;
+      
+      const username = nicknameElement.textContent.trim();
+      const chatId = chatLink.getAttribute("data-id");
+      
+      // Create notes button
+      const notesBtn = document.createElement("button");
+      notesBtn.className = "button button--icon button--secondary list__row__right__no-border mym-notes-button";
+      notesBtn.type = "button";
+      notesBtn.title = `Ouvrir les notes pour ${username}`;
+      notesBtn.style.cssText = `
+        width: 36px;
+        height: 36px;
+        padding: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 50%;
+        transition: all 0.2s;
+      `;
+      notesBtn.textContent = "📝";
+
+      notesBtn.addEventListener("mouseenter", () => {
+        notesBtn.style.background = "rgba(102, 126, 234, 0.25)";
+        notesBtn.style.transform = "scale(1.1)";
+        notesBtn.style.boxShadow = "0 4px 8px rgba(102, 126, 234, 0.3)";
+      });
+
+      notesBtn.addEventListener("mouseleave", () => {
+        notesBtn.style.background = "";
+        notesBtn.style.transform = "";
+        notesBtn.style.boxShadow = "";
+      });
+
+      notesBtn.onclick = (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        if (contentAPI.notes && contentAPI.notes.openNotesForUser) {
+          contentAPI.notes.openNotesForUser(username, chatId);
+        }
+      };
+
+      rightSection.insertBefore(notesBtn, chatLink);
+    });
+  }
+
   // Rafraîchir toutes les 30 secondes
   setInterval(refreshConversationsList, 30000);
 
@@ -694,6 +761,7 @@
     updateConversationsList: refreshConversationsList, // Rafraîchir la liste existante
     refreshConversationsList,
     removeSidebarFooter,
+    reinjectNotesButtons,
     init,
   };
 

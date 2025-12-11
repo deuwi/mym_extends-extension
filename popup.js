@@ -9,18 +9,11 @@
 
   // console.log(`🔧 Popup loaded with API_BASE: ${API_BASE}`);
 
-  const toggles = {
-    toggle: "mym_live_enabled",
-    "toggle-badges": "mym_badges_enabled",
-    "toggle-stats": "mym_stats_enabled",
-    "toggle-emoji": "mym_emoji_enabled",
-    "toggle-notes": "mym_notes_enabled",
-  };
-
   // Elements
   const authSection = document.getElementById("auth-section");
   const userSection = document.getElementById("user-section");
   const connectBtn = document.getElementById("connectBtn");
+  const toggleAllFeatures = document.getElementById("toggle-all-features");
   const logoutBtn = document.getElementById("logoutBtn");
   const authStatus = document.getElementById("authStatus");
   const userEmailSpan = document.getElementById("userEmail");
@@ -43,20 +36,6 @@
   const licenseStatusDisplay = document.getElementById("licenseStatusDisplay");
   const licenseDetails = document.getElementById("licenseDetails");
 
-  function renderToggle(element, isOn) {
-    if (isOn) element.classList.add("on");
-    else element.classList.remove("on");
-  }
-
-  // Initialize all toggles
-  const defaults = {
-    mym_live_enabled: false,
-    mym_badges_enabled: false,
-    mym_stats_enabled: false,
-    mym_emoji_enabled: false,
-    mym_notes_enabled: false,
-  };
-
   let isInitializing = true; // Flag pour éviter les recharges lors de l'ouverture
 
   // 🔄 Écouter les changements dans le storage (pour la connexion Google et le background)
@@ -67,18 +46,12 @@
         return;
       }
 
-      // Rafraîchir si le token change OU si les features sont activées (= background a vérifié)
+      // Rafraîchir si le token change (connexion/déconnexion)
       const tokenChanged = changes.access_token || changes.firebaseToken;
-      const featuresChanged =
-        changes.mym_live_enabled ||
-        changes.mym_badges_enabled ||
-        changes.mym_stats_enabled ||
-        changes.mym_emoji_enabled ||
-        changes.mym_notes_enabled;
 
-      if (tokenChanged || featuresChanged) {
-        // console.log("🔄 Storage changed, refreshing UI...", { tokenChanged, featuresChanged });
-        // Attendre un peu que toutes les valeurs soient stockées
+      if (tokenChanged) {
+        // Token changé = Connexion/Déconnexion → Recharger tout
+        // console.log("🔄 Token changed, refreshing UI...");
         setTimeout(() => {
           initializeAuth();
         }, 100);
@@ -99,7 +72,6 @@
         "firebaseToken",
         "access_token_stored_at",
         "user_email",
-        ...Object.values(toggles),
       ],
       (data) => {
         const safeData = data || {};
@@ -107,20 +79,10 @@
         const token = safeData.firebaseToken || safeData.access_token;
         const tokenTime = safeData.access_token_stored_at;
         
-        // 🔍 Vérifier si les features sont activées (le background a déjà vérifié l'abonnement)
-        const anyFeatureEnabled = Object.values(toggles).some(
-          (storageKey) => data[storageKey] === true
-        );
-        
         if (!token) {
           // Pas de token - afficher formulaire de connexion
           showAuthSection();
           disableAllToggles();
-        } else if (anyFeatureEnabled) {
-          // Features activées = Background a vérifié l'abonnement = OK
-          // Vérifier quand même pour afficher les infos (mais ne pas bloquer si erreur)
-          // console.log("✅ Features activées détectées, affichage interface utilisateur");
-          verifyToken(token, data.user_email);
         } else if (tokenTime) {
           // Vérifier l'âge seulement si on a un timestamp
           const now = Date.now();
@@ -136,21 +98,46 @@
           // Pas de timestamp (firebaseToken sans access_token_stored_at) - vérifier directement
           verifyToken(token, data.user_email);
         }
-
-        // Initialize toggles state
-        Object.entries(toggles).forEach(([elementId, storageKey]) => {
-          const element = document.getElementById(elementId);
-          if (element) {
-            const val = data[storageKey] ?? defaults[storageKey];
-            renderToggle(element, val);
-          }
-        });
       }
     );
   }
 
   // Check authentication status on load
   initializeAuth();
+
+  // Initialiser l'état du toggle "Toutes les fonctionnalités"
+  function updateAllFeaturesToggle() {
+    chrome.storage.local.get(
+      [
+        "mym_live_enabled",
+        "mym_badges_enabled",
+        "mym_stats_enabled",
+        "mym_emoji_enabled",
+        "mym_notes_enabled",
+      ],
+      (data) => {
+        const safeData = data || {};
+        // Vérifier si AU MOINS une fonctionnalité est activée
+        const anyEnabled =
+          safeData.mym_live_enabled ||
+          safeData.mym_badges_enabled ||
+          safeData.mym_stats_enabled ||
+          safeData.mym_emoji_enabled ||
+          safeData.mym_notes_enabled;
+
+        if (toggleAllFeatures) {
+          if (anyEnabled) {
+            toggleAllFeatures.classList.add("on");
+          } else {
+            toggleAllFeatures.classList.remove("on");
+          }
+        }
+      }
+    );
+  }
+
+  // Mettre à jour le toggle au chargement
+  updateAllFeaturesToggle();
 
   function showAuthSection() {
     authSection.style.display = "block";
@@ -202,9 +189,6 @@
         ? `🏢 ${subscriptionData.agency_name}`
         : "🏢 Licence Agence";
       if (pricingLinkContainer) pricingLinkContainer.style.display = "none";
-
-      // 🔓 Auto-activer toutes les fonctionnalités avec une licence agence
-      enableAllFeaturesAutomatically();
     } else if (subscriptionData.status === "error") {
       subscriptionBadge.className = "subscription-badge inactive";
       subscriptionBadge.textContent = "⚠️ Erreur";
@@ -223,52 +207,20 @@
       // Afficher le lien vers la page de tarification si l'essai ou l'abonnement a expiré
       if (pricingLinkContainer) pricingLinkContainer.style.display = "flex";
     }
+    
+    // Masquer/Afficher le bouton toggle selon le statut de l'abonnement
+    const featuresControl = document.querySelector('.features-control');
+    if (featuresControl) {
+      if (hasActiveAccess) {
+        featuresControl.style.display = 'block';
+      } else {
+        featuresControl.style.display = 'none';
+      }
+    }
   }
 
   function disableAllToggles() {
-    Object.keys(toggles).forEach((elementId) => {
-      const element = document.getElementById(elementId);
-      if (element) {
-        element.style.opacity = "0.3";
-        element.style.pointerEvents = "none";
-      }
-    });
-  }
-
-  function enableAllToggles() {
-    Object.keys(toggles).forEach((elementId) => {
-      const element = document.getElementById(elementId);
-      if (element) {
-        element.style.opacity = "1";
-        element.style.pointerEvents = "auto";
-      }
-    });
-  }
-
-  // 🔓 Activer automatiquement toutes les fonctionnalités
-  function enableAllFeaturesAutomatically() {
-    // console.log("🔓 Auto-activation de toutes les fonctionnalités...");
-
-    // Activer tous les toggles dans le storage
-    const allEnabled = {
-      mym_live_enabled: true,
-      mym_badges_enabled: true,
-      mym_stats_enabled: true,
-      mym_emoji_enabled: true,
-      mym_notes_enabled: true,
-    };
-
-    chrome.storage.local.set(allEnabled, () => {
-      // console.log("✅ Toutes les fonctionnalités activées automatiquement");
-
-      // Mettre à jour l'UI
-      Object.entries(toggles).forEach(([elementId, storageKey]) => {
-        const element = document.getElementById(elementId);
-        if (element) {
-          renderToggle(element, true);
-        }
-      });
-    });
+    // Plus besoin de désactiver les toggles car ils n'existent plus
   }
 
   // Fonction pour vérifier l'abonnement avec le token Firebase
@@ -363,7 +315,6 @@
                   email_verified: true,
                 });
                 showStatus("⚠️ Impossible de vérifier l'abonnement (erreur serveur)", "error");
-                enableAllToggles();
               }
               resolve();
               return;
@@ -383,7 +334,6 @@
                 email_verified: true,
               });
               showStatus("⚠️ Erreur serveur, veuillez réessayer plus tard", "error");
-              enableAllToggles();
               resolve();
               return;
             }
@@ -408,7 +358,6 @@
               email_verified: true,
             });
             showStatus("⚠️ Impossible de vérifier l'abonnement (erreur réseau)", "error");
-            enableAllToggles();
             resolve();
           }
         }
@@ -503,19 +452,6 @@
           "⚠️ Impossible de vérifier l'abonnement (erreur réseau)",
           "error"
         );
-        enableAllToggles();
-
-        // Mettre à jour visuellement les toggles
-        chrome.storage.local.get(Object.values(toggles), (items) => {
-          const safeItems = items || {};
-          Object.entries(toggles).forEach(([elementId, storageKey]) => {
-            const element = document.getElementById(elementId);
-            if (element) {
-              const isOn = safeItems[storageKey] ?? defaults[storageKey];
-              renderToggle(element, isOn);
-            }
-          });
-        });
         return;
       }
 
@@ -531,7 +467,6 @@
           status: "error",
         });
         showStatus("⚠️ Erreur serveur (réponse invalide)", "error");
-        enableAllToggles();
         return;
       }
 
@@ -560,20 +495,7 @@
         data.agency_license_active
       ) {
         showUserSection(userEmail, data);
-        enableAllToggles();
         hideStatus();
-
-        // Mettre à jour visuellement les toggles selon leur état dans le storage
-        chrome.storage.local.get(Object.values(toggles), (items) => {
-          const safeItems = items || {};
-          Object.entries(toggles).forEach(([elementId, storageKey]) => {
-            const element = document.getElementById(elementId);
-            if (element) {
-              const isOn = safeItems[storageKey] ?? defaults[storageKey];
-              renderToggle(element, isOn);
-            }
-          });
-        });
       } else {
         // Aucun accès actif - afficher l'utilisateur mais désactiver les toggles
         // et proposer de s'abonner ou d'utiliser une licence agence
@@ -760,74 +682,110 @@
       chrome.storage.onChanged.removeListener(storageListener);
     }, 60000);
   });
-  logoutBtn.addEventListener("click", handleLogout);
 
-  // Toggle handlers
-  Object.entries(toggles).forEach(([elementId, storageKey]) => {
-    const element = document.getElementById(elementId);
-    if (!element) return;
+  // Toggle pour activer/désactiver toutes les fonctionnalités
+  if (toggleAllFeatures) {
+    toggleAllFeatures.addEventListener("click", () => {
+      chrome.storage.local.get(
+        [
+          "mym_live_enabled",
+          "mym_badges_enabled",
+          "mym_stats_enabled",
+          "mym_emoji_enabled",
+          "mym_notes_enabled",
+        ],
+        (data) => {
+          const safeData = data || {};
+          // Vérifier si au moins une est activée
+          const anyEnabled =
+            safeData.mym_live_enabled ||
+            safeData.mym_badges_enabled ||
+            safeData.mym_stats_enabled ||
+            safeData.mym_emoji_enabled ||
+            safeData.mym_notes_enabled;
 
-    element.addEventListener("click", async () => {
-      // Récupérer la valeur actuelle pour savoir si on active ou désactive
-      chrome.storage.local.get([storageKey], async (data) => {
-        const safeData = data || {};
-        const currentVal = safeData[storageKey] ?? false;
-        const newVal = !currentVal;
+          // Toggle: si au moins une activée -> tout désactiver, sinon tout activer
+          const newState = !anyEnabled;
 
-        // 🔒 Vérifier l'abonnement UNIQUEMENT si on veut ACTIVER
-        if (newVal) {
-          const canActivate = await checkSubscriptionBeforeToggle();
-          if (!canActivate) {
+          const allFeatures = {
+            mym_live_enabled: newState,
+            mym_badges_enabled: newState,
+            mym_stats_enabled: newState,
+            mym_emoji_enabled: newState,
+            mym_notes_enabled: newState,
+          };
+
+          chrome.storage.local.set(allFeatures, () => {
+            // Mettre à jour le toggle visuellement
+            updateAllFeaturesToggle();
+
             showStatus(
-              "⚠️ Accès Premium requis. Souscrivez un abonnement ou activez une licence agence.",
-              "error"
+              newState
+                ? "✅ Toutes les fonctionnalités activées"
+                : "✅ Toutes les fonctionnalités désactivées",
+              "success"
             );
-            setTimeout(hideStatus, 5000);
-            return;
-          }
-        }
+            setTimeout(() => {
+              hideStatus();
+            }, 3000);
 
-        // Activer ou désactiver
-        chrome.storage.local.set({ 
-          [storageKey]: newVal,
-          user_manual_toggle_timestamp: Date.now() // Marquer le toggle manuel
-        }, () => {
-          renderToggle(element, newVal);
-          
-          // 🔄 Notifier le content script pour appliquer les changements immédiatement
-          chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-            if (tabs[0]) {
-              const url = tabs[0].url || "";
-              if (url.startsWith("http://") || url.startsWith("https://")) {
-                chrome.tabs.sendMessage(
-                  tabs[0].id,
-                  {
-                    action: "toggleFeature",
-                    feature: storageKey,
-                    enabled: newVal
-                  },
-                  (response) => {
-                    if (chrome.runtime.lastError) {
-                      // Content script non chargé, le changement sera appliqué au prochain chargement
-                      console.log("Content script not loaded:", chrome.runtime.lastError.message);
-                    }
+            // Notifier tous les onglets
+            chrome.tabs.query({}, (tabs) => {
+              tabs.forEach((tab) => {
+                if (
+                  tab.url &&
+                  (tab.url.startsWith("http://") ||
+                    tab.url.startsWith("https://"))
+                ) {
+                  if (newState) {
+                    // Activer toutes les fonctionnalités
+                    Object.keys(allFeatures).forEach((feature) => {
+                      chrome.tabs.sendMessage(
+                        tab.id,
+                        {
+                          action: "toggleFeature",
+                          feature: feature,
+                          enabled: true,
+                        },
+                        () => {
+                          if (chrome.runtime.lastError) {
+                            // Ignorer les erreurs
+                          }
+                        }
+                      );
+                    });
+                  } else {
+                    // Désactiver toutes les fonctionnalités
+                    chrome.tabs.sendMessage(
+                      tab.id,
+                      {
+                        action: "disableAllFeatures",
+                      },
+                      () => {
+                        if (chrome.runtime.lastError) {
+                          // Ignorer les erreurs
+                        }
+                      }
+                    );
                   }
-                );
-              }
-            }
+                }
+              });
+            });
           });
-        });
-      });
+        }
+      );
     });
 
-    // Keyboard accessibility
-    element.addEventListener("keydown", (ev) => {
+    // Accessibility: keyboard support
+    toggleAllFeatures.addEventListener("keydown", (ev) => {
       if (ev.key === "Enter" || ev.key === " ") {
         ev.preventDefault();
-        element.click();
+        toggleAllFeatures.click();
       }
     });
-  });
+  }
+
+  logoutBtn.addEventListener("click", handleLogout);
 
   // 🔒 Vérifier le statut avant d'autoriser l'activation d'une feature
   async function checkSubscriptionBeforeToggle() {
@@ -842,6 +800,34 @@
           if (!token && !email) {
             resolve(false);
             return;
+          }
+
+          // Vérifier si le token JWT est expiré
+          if (token) {
+            try {
+              const base64Url = token.split('.')[1];
+              if (base64Url) {
+                const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+                const jsonPayload = decodeURIComponent(atob(base64).split('').map(c => {
+                  return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
+                }).join(''));
+                const decoded = JSON.parse(jsonPayload);
+                
+                if (decoded.exp) {
+                  const expiresAt = decoded.exp * 1000;
+                  const now = Date.now();
+                  
+                  if (now >= expiresAt) {
+                    console.log("🚫 [POPUP] Token expiré - toggle refusé");
+                    showToast("Token expiré. Veuillez vous reconnecter.", "error");
+                    resolve(false);
+                    return;
+                  }
+                }
+              }
+            } catch (err) {
+              console.warn("⚠️ [POPUP] Erreur décodage token:", err);
+            }
           }
 
           try {
@@ -1193,9 +1179,10 @@
     },
     dark: {
       name: "Sombre",
-      primary: "#434343",
-      secondary: "#000000",
-      gradient: "linear-gradient(135deg, #434343 0%, #000000 100%)",
+      primary: "#8b9bff",
+      secondary: "#9b7bd5",
+      gradient: "linear-gradient(135deg, #8b9bff 0%, #9b7bd5 100%)",
+      background: "#0a0b0e",
     },
   };
 
@@ -1206,6 +1193,24 @@
     document.documentElement.style.setProperty("--theme-primary", theme.primary);
     document.documentElement.style.setProperty("--theme-secondary", theme.secondary);
     document.documentElement.style.setProperty("--theme-gradient", theme.gradient);
+
+    // Appliquer le fond de la popup si le thème a une couleur de fond spécifique
+    if (theme.background) {
+      document.body.style.background = theme.background;
+      document.body.style.color = "#e5e7eb"; // Texte clair pour dark mode
+      const popupContainer = document.querySelector(".popup-container");
+      if (popupContainer) {
+        popupContainer.style.background = theme.background;
+      }
+    } else {
+      // Réinitialiser au fond par défaut
+      document.body.style.background = "#020408";
+      document.body.style.color = "";
+      const popupContainer = document.querySelector(".popup-container");
+      if (popupContainer) {
+        popupContainer.style.background = "#020408";
+      }
+    }
 
     // Mettre à jour tous les éléments avec gradient
     const gradientElements = document.querySelectorAll(".popup-header h1, .toggle.on, .link-container a.pricing-link");
@@ -1249,7 +1254,7 @@
           }, (response) => {
             // Ignorer l'erreur si le content script n'est pas chargé
             if (chrome.runtime.lastError) {
-              console.log("Content script not loaded on this page:", chrome.runtime.lastError.message);
+              // console.log("Content script not loaded on this page:", chrome.runtime.lastError.message);
             }
           });
         }
