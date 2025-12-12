@@ -40,7 +40,7 @@
         const themeName = data.user_theme || localStorage.getItem("user_theme") || "default";
         const theme = THEMES[themeName] || THEMES.default;
 
-        // console.log("🎨 [Theme Sync] Initial theme loaded:", themeName);
+        if (APP_CONFIG.DEBUG) console.log("🎨 [Theme Sync] Initial theme loaded:", themeName);
 
         // Synchroniser vers localStorage pour React
         isUpdatingTheme = true;
@@ -79,13 +79,13 @@
     if (isUpdatingTheme) return;
 
     const theme = THEMES[themeName] || THEMES.default;
-    // console.log("🎨 [Theme Sync] Theme changed in localStorage:", themeName);
+    if (APP_CONFIG.DEBUG) console.log("🎨 [Theme Sync] Theme changed in localStorage:", themeName);
 
     // Synchroniser vers chrome.storage
     if (chrome && chrome.storage) {
       isUpdatingTheme = true;
       chrome.storage.local.set({ user_theme: themeName }, () => {
-        // console.log(`🎨 [Theme Sync] Theme "${themeName}" saved to chrome.storage`);
+        if (APP_CONFIG.DEBUG) console.log(`🎨 [Theme Sync] Theme "${themeName}" saved to chrome.storage`);
         isUpdatingTheme = false;
       });
     }
@@ -121,7 +121,7 @@
       if (areaName === "local" && changes.user_theme && !isUpdatingTheme) {
         const newTheme = changes.user_theme.newValue;
         if (newTheme) {
-          // console.log("🎨 [Theme Sync] Theme changed from popup:", newTheme);
+          if (APP_CONFIG.DEBUG) console.log("🎨 [Theme Sync] Theme changed from popup:", newTheme);
           
           // Mettre à jour localStorage pour React
           isUpdatingTheme = true;

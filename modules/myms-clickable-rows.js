@@ -10,6 +10,11 @@
   const contentAPI = window.MYM_CONTENT_API || {};
   const debounce = contentAPI.debounce || function(f, w) { return f; }; // Fallback
   const SELECTORS = contentAPI.SELECTORS || {};
+  const CleanupManager = contentAPI.CleanupManager;
+
+  // Cleanup tracking
+  let pageCheckInterval = null;
+  let rowsObserver = null;
 
   // ========================================
   // INJECT CSS FOR POINTER CURSOR
@@ -150,9 +155,12 @@
     init();
   }
 
-  // Réinitialiser lors des changements de page (navigation SPA)
+  // Réinitialiser lors des changements de page (navigation SPA) - avec cleanup
   let lastPath = window.location.pathname;
-  setInterval(() => {
+  if (pageCheckInterval) {
+    CleanupManager.clearInterval(pageCheckInterval);
+  }
+  pageCheckInterval = CleanupManager.registerInterval(() => {
     if (window.location.pathname !== lastPath) {
       lastPath = window.location.pathname;
       if (window.location.pathname.startsWith("/app/myms")) {
@@ -160,4 +168,23 @@
       }
     }
   }, 500);
+
+  // Cleanup function
+  function cleanup() {
+    if (pageCheckInterval) {
+      CleanupManager.clearInterval(pageCheckInterval);
+      pageCheckInterval = null;
+    }
+    if (rowsObserver) {
+      CleanupManager.disconnectObserver(rowsObserver);
+      rowsObserver = null;
+    }
+  }
+
+  // Expose cleanup
+  if (contentAPI) {
+    contentAPI.mymsClickableRows = {
+      cleanup
+    };
+  }
 })();

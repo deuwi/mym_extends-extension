@@ -28,7 +28,7 @@
 
     // Pour userInfoBox, utiliser un controller séparé si nécessaire
     if (source === "userInfoBox") {
-      // // // // console.log("📊 [MYM Badges] UserInfoBox request, proceeding...");
+      if (APP_CONFIG.DEBUG) console.log("📊 [MYM Badges] UserInfoBox request, proceeding...");
     }
 
     badgeFetchController = new AbortController();
@@ -42,13 +42,13 @@
         cached &&
         Date.now() - cached.timestamp < contentAPI.USER_INFO_CACHE_DURATION
       ) {
-        // console.log(`✅ [MYM Badges] Using cached data for ${username}`);
+        if (APP_CONFIG.DEBUG) console.log(`✅ [MYM Badges] Using cached data for ${username}`);
         badgeFetchController = null;
         return cached.data;
       }
     }
 
-    // console.log(`🌐 [MYM Badges] Fetching fresh data for ${username}...`);
+    if (APP_CONFIG.DEBUG) console.log(`🌐 [MYM Badges] Fetching fresh data for ${username}...`);
 
     const info = {
       username: username,
@@ -221,16 +221,18 @@
       badge = document.createElement("div");
       badge.className = "mym-total-spent-badge";
       badge.style.cssText = `
-        display: inline-block;
+        position: absolute;
+        bottom: -14px;
+        left: -14px;
         background: ${getComputedStyle(document.documentElement).getPropertyValue('--mym-theme-gradient').trim() || 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)'};
         color: white;
-        padding: 4px 8px;
-        border-radius: 12px;
-        font-size: 12px;
-        font-weight: 600;
-        margin-left: 8px;
-        vertical-align: middle;
-        border: 2px solid #3b82f6;
+        padding: 2px 6px;
+        border-radius: 8px;
+        font-size: 10px;
+        font-weight: 700;
+        box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+        z-index: 10;
+        border: 2px solid #1a1d2e;
       `;
       badge.textContent = `${totalSpent.toFixed(2)}€`;
       badge.title = `Revenu total de ${username}: ${totalSpent.toFixed(2)}€`;
@@ -242,7 +244,20 @@
       categoryBadge = createCategoryBadge(config, category);
     }
 
-    // Chercher le conteneur pour le badge - plusieurs possibilités
+    // Chercher l'avatar pour positionner le badge en bas à gauche
+    const avatarContainer = card.querySelector(".avatar") || 
+                           card.querySelector(".list__row__left__image");
+    
+    // Si on a un avatar, placer le badge dessus
+    if (badge && avatarContainer) {
+      // S'assurer que l'avatar a position relative
+      if (getComputedStyle(avatarContainer).position === 'static') {
+        avatarContainer.style.position = 'relative';
+      }
+      avatarContainer.appendChild(badge);
+    }
+
+    // Pour le badge de catégorie, garder l'ancien comportement (à côté du nom)
     let targetContainer =
       card.querySelector(".user-card__nickname-container") || // Pour les user-card
       card.querySelector(".nickname_profile") || // Pour les list__row
@@ -268,18 +283,15 @@
     //   `  - .list__row__right: ${!!card.querySelector(".list__row__right")}`
     // );
 
-    if (targetContainer) {
-      if (badge) targetContainer.appendChild(badge);
-      if (categoryBadge) targetContainer.appendChild(categoryBadge);
-      // console.log(
-      //   `✅ [MYM Badges] Badge inserted in ${targetContainer.className}`
-      // );
-    } else {
-      console.warn(
-        `⚠️ [MYM Badges] No target container found in card`,
-        card.className
-      );
-      console.warn(`  Card HTML structure:`, card.innerHTML.substring(0, 300));
+    // Le badge de catégorie va à côté du nom
+    if (targetContainer && categoryBadge) {
+      targetContainer.appendChild(categoryBadge);
+    }
+    
+    // Si pas d'avatar trouvé mais un conteneur, fallback sur l'ancien comportement
+    if (badge && !avatarContainer && targetContainer) {
+      targetContainer.appendChild(badge);
+      console.warn(`⚠️ [MYM Badges] Avatar not found, badge placed in ${targetContainer.className}`);
     }
   }
 
@@ -299,7 +311,6 @@
       font-weight: 600;
       margin-left: 4px;
       vertical-align: middle;
-      border: 2px solid #3b82f6;
     `;
     badge.textContent = `${config.emoji} ${category}`;
     badge.title = config.label;
@@ -311,23 +322,23 @@
    */
   async function scanExistingListsForBadges() {
     if (!contentAPI.badgesEnabled) {
-      // // // // console.log("⏸️ [MYM Badges] Badges disabled, skipping scan");
+      if (APP_CONFIG.DEBUG) console.log("⏸️ [MYM Badges] Badges disabled, skipping scan");
       return;
     }
 
-    // // // // console.log("🔍 [MYM Badges] Starting scan...");
+    if (APP_CONFIG.DEBUG) console.log("🔍 [MYM Badges] Starting scan...");
 
     // Debug: afficher toute la structure de la page
-    // // // // console.log("🔍 [MYM Badges] Full page structure:");
-    // // // // console.log("  body children:", document.body.children.length);
+    if (APP_CONFIG.DEBUG) console.log("🔍 [MYM Badges] Full page structure:");
+    if (APP_CONFIG.DEBUG) console.log("  body children:", document.body.children.length);
 
     const mainContainers = document.querySelectorAll(
       'main, [role="main"], .main, .page, .app, .container'
     );
-    // console.log(`  Found ${mainContainers.length} main containers`);
+    if (APP_CONFIG.DEBUG) console.log(`  Found ${mainContainers.length} main containers`);
 
     mainContainers.forEach((container, idx) => {
-      // console.log(`    [${idx}] ${container.tagName}.${container.className}`);
+      if (APP_CONFIG.DEBUG) console.log(`    [${idx}] ${container.tagName}.${container.className}`);
       // console.log(
       //   `        Children (${container.children.length}):`,
       //   Array.from(container.children)
@@ -350,7 +361,7 @@
           const parent = link.closest(
             '[class*="row"], [class*="card"], [class*="item"], [class*="chat"], [class*="conversation"]'
           );
-          // console.log(`    [${idx}] ${link.href}`);
+          if (APP_CONFIG.DEBUG) console.log(`    [${idx}] ${link.href}`);
           // console.log(
           //   `        Parent: ${
           //     parent ? parent.tagName + "." + parent.className : "none"
@@ -370,7 +381,7 @@
       "[class*='discussion']",
     ];
 
-    // // // // console.log("🔍 [MYM Badges] Searching for conversation containers...");
+    if (APP_CONFIG.DEBUG) console.log("🔍 [MYM Badges] Searching for conversation containers...");
 
     for (const selector of possibleSelectors) {
       const containers = document.querySelectorAll(selector);
@@ -392,7 +403,7 @@
               classes: c.className,
               hasLink: !!c.querySelector('a[href*="/app/chat/"]'),
             }));
-          // console.log(`    First 3 children:`, firstChildren);
+          if (APP_CONFIG.DEBUG) console.log(`    First 3 children:`, firstChildren);
         });
       }
     }
@@ -421,7 +432,7 @@
 
     for (const container of listContainers) {
       // Debug: afficher la structure HTML du conteneur
-      // console.log(`🔍 [MYM Badges] Container classes:`, container.className);
+      if (APP_CONFIG.DEBUG) console.log(`🔍 [MYM Badges] Container classes:`, container.className);
       // console.log(
       //   `🔍 [MYM Badges] Container children count:`,
       //   container.children.length
@@ -437,7 +448,7 @@
           linkHref: c.querySelector('a[href*="/app/chat/"]')?.href || "none",
         }));
 
-      // console.log(`🔍 [MYM Badges] First 5 children:`, firstChildren);
+      if (APP_CONFIG.DEBUG) console.log(`🔍 [MYM Badges] First 5 children:`, firstChildren);
       firstChildren.forEach((child, i) => {
         // console.log(
         //   `  [${i}] ${child.tag}.${child.classes || "(no class)"} - Link: ${
@@ -481,7 +492,7 @@
         // );
       }
 
-      // console.log(`🔍 [MYM Badges] Found ${rows.length} rows in container`);
+      if (APP_CONFIG.DEBUG) console.log(`🔍 [MYM Badges] Found ${rows.length} rows in container`);
 
       for (const row of rows) {
         try {
@@ -509,16 +520,16 @@
 
           const username = contentAPI.extractUsername(link);
           if (!username) {
-            // // // // console.log("⚠️ [MYM Badges] No username extracted from", link.href);
+            if (APP_CONFIG.DEBUG) console.log("⚠️ [MYM Badges] No username extracted from", link.href);
             continue;
           }
 
           if (totalSpentFetched.get(username)) {
-            // console.log(`⏭️ [MYM Badges] Already fetched ${username}`);
+            if (APP_CONFIG.DEBUG) console.log(`⏭️ [MYM Badges] Already fetched ${username}`);
             continue;
           }
 
-          // console.log(`💰 [MYM Badges] Fetching info for ${username}`);
+          if (APP_CONFIG.DEBUG) console.log(`💰 [MYM Badges] Fetching info for ${username}`);
           totalSpentFetched.set(username, true);
 
           const info = await fetchUserDetailedInfo(username);
@@ -597,7 +608,7 @@
   function removeBadgesUI() {
     const badges = document.querySelectorAll(".mym-total-spent-badge, .mym-category-badge");
     badges.forEach((badge) => badge.remove());
-    // console.log(`🧹 [MYM Badges] Removed ${badges.length} badge(s) from DOM`);
+    if (APP_CONFIG.DEBUG) console.log(`🧹 [MYM Badges] Removed ${badges.length} badge(s) from DOM`);
   }
 
   /**
@@ -606,7 +617,7 @@
   function clearBadgeCaches() {
     totalSpentFetched.clear();
     userInfoCache.clear();
-    // console.log(`🧹 [MYM Badges] Caches cleared`);
+    if (APP_CONFIG.DEBUG) console.log(`🧹 [MYM Badges] Caches cleared`);
   }
 
   // Export des fonctions publiques
@@ -619,5 +630,5 @@
     clearBadgeCaches,
   };
 
-  // // // // console.log("✅ [MYM Badges] Module loaded");
+  if (APP_CONFIG.DEBUG) console.log("✅ [MYM Badges] Module loaded");
 })(window.MYM_CONTENT_API);

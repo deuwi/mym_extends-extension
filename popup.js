@@ -7,7 +7,7 @@
   const TOKEN_MAX_AGE =
     window.APP_CONFIG?.TOKEN_MAX_AGE || 365 * 24 * 60 * 60 * 1000;
 
-  // console.log(`🔧 Popup loaded with API_BASE: ${API_BASE}`);
+  if (APP_CONFIG.DEBUG) console.log(`🔧 Popup loaded with API_BASE: ${API_BASE}`);
 
   // Elements
   const authSection = document.getElementById("auth-section");
@@ -51,7 +51,7 @@
 
       if (tokenChanged) {
         // Token changé = Connexion/Déconnexion → Recharger tout
-        // console.log("🔄 Token changed, refreshing UI...");
+        if (APP_CONFIG.DEBUG) console.log("🔄 Token changed, refreshing UI...");
         setTimeout(() => {
           initializeAuth();
         }, 100);
@@ -160,14 +160,14 @@
 
     if (licenseSection) {
       if (hasAgencyLicense || (!hasSubscription && !hasTrial)) {
-        // console.log("✅ Showing license section");
+        if (APP_CONFIG.DEBUG) console.log("✅ Showing license section");
         licenseSection.style.display = "block";
         // Vérifier et afficher le formulaire ou le statut de licence
         checkLicense().then((licenseData) => {
           showLicenseSection(licenseData);
         });
       } else {
-        // console.log("❌ Hiding license section");
+        if (APP_CONFIG.DEBUG) console.log("❌ Hiding license section");
         licenseSection.style.display = "none";
       }
     } else {
@@ -339,7 +339,7 @@
             }
 
             const result = await res.json();
-            // console.log("✅ Abonnement vérifié:", result);
+            if (APP_CONFIG.DEBUG) console.log("✅ Abonnement vérifié:", result);
 
             // Stocker l'email si disponible
             if (result.email) {
@@ -590,7 +590,7 @@
         "user_id",
       ],
       () => {
-        // console.log("🔓 Déconnexion complète - tous les tokens supprimés");
+        if (APP_CONFIG.DEBUG) console.log("🔓 Déconnexion complète - tous les tokens supprimés");
         showAuthSection();
         disableAllToggles();
         hideStatus();
@@ -623,7 +623,7 @@
                   (details) => {
                     if (details) {
                       totalCookiesRemoved++;
-                      // console.log(`🍪 Cookie supprimé: ${cookie.name}`);
+                      if (APP_CONFIG.DEBUG) console.log(`🍪 Cookie supprimé: ${cookie.name}`);
                     }
                   }
                 );
@@ -633,7 +633,7 @@
         }
 
         setTimeout(() => {
-          // console.log(`🍪 Total: ${totalCookiesRemoved} cookie(s) mymchat.fr supprimé(s)`);
+          if (APP_CONFIG.DEBUG) console.log(`🍪 Total: ${totalCookiesRemoved} cookie(s) mymchat.fr supprimé(s)`);
           
           // Recharger les onglets mymchat.fr pour appliquer la déconnexion
           chrome.tabs.query({ url: "*://mymchat.fr/*" }, (tabs) => {
@@ -658,7 +658,7 @@
     // Écouter les changements dans le storage pour détecter le nouveau token
     const storageListener = (changes, areaName) => {
       if (areaName === "local" && changes.firebaseToken) {
-        // console.log("✅ Nouveau token Firebase détecté");
+        if (APP_CONFIG.DEBUG) console.log("✅ Nouveau token Firebase détecté");
 
         // Vérifier l'abonnement avec ce token
         checkSubscription().then(() => {
@@ -908,7 +908,7 @@
               headers,
             });
             if (!res.ok) {
-              // console.log("ℹ️ Aucune licence agence trouvée");
+              if (APP_CONFIG.DEBUG) console.log("ℹ️ Aucune licence agence trouvée");
               resolve(null);
               return;
             }
@@ -1132,7 +1132,7 @@
   // Au chargement du popup, forcer la vérification de la licence
   setTimeout(() => {
     chrome.runtime.sendMessage({ action: "checkLicense" }, (response) => {
-      // console.log("🔓 Vérification de la licence au chargement du popup");
+      if (APP_CONFIG.DEBUG) console.log("🔓 Vérification de la licence au chargement du popup");
     });
   }, 500);
 

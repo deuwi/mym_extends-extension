@@ -1256,10 +1256,9 @@
       right: 8px;
       bottom: 8px;
       background: ${getComputedStyle(document.documentElement).getPropertyValue('--mym-theme-gradient').trim() || `linear-gradient(135deg, ${window.APP_CONFIG.PRIMARY_GRADIENT_START} 0%, ${window.APP_CONFIG.PRIMARY_GRADIENT_END} 100%)`};
-      border: 2px solid #3b82f6;
       border-radius: 50%;
-      width: 36px;
-      height: 36px;
+      width: 28px;
+      height: 28px;
       padding: 0;
       font-size: 20px;
       cursor: pointer;
@@ -1326,7 +1325,7 @@
     const buttons = document.querySelectorAll(".mym-emoji-trigger");
     buttons.forEach((btn) => btn.remove());
     
-    // console.log("🧹 [MYM Emoji] Removed emoji UI elements");
+    if (APP_CONFIG.DEBUG) console.log("🧹 [MYM Emoji] Removed emoji UI elements");
   }
 
   // Export public API
@@ -1339,5 +1338,5 @@
     removeEmojiUI,
   };
 
-  // // // console.log("✅ [MYM Emoji] Module loaded");
+  if (APP_CONFIG.DEBUG) console.log("✅ [MYM Emoji] Module loaded");
 })(window.MYM_CONTENT_API);

@@ -464,5 +464,159 @@
     };
   };
 
-  // console.log("✅ [MYM Core] Module loaded");
+  /**
+   * Centralized Cleanup Manager
+   * Prevents memory leaks by tracking all intervals, observers, and listeners
+   */
+  API.CleanupManager = (function() {
+    const intervals = new Set();
+    const timeouts = new Set();
+    const observers = new Set();
+    const listeners = new Map(); // { target => [{ event, handler, options }] }
+
+    return {
+      /**
+       * Register a setInterval that will be automatically cleaned up
+       * @param {Function} callback - Function to call
+       * @param {number} delay - Delay in milliseconds
+       * @returns {number} Interval ID
+       */
+      registerInterval(callback, delay) {
+        const id = setInterval(callback, delay);
+        intervals.add(id);
+        return id;
+      },
+
+      /**
+       * Register a setTimeout that will be automatically cleaned up
+       * @param {Function} callback - Function to call
+       * @param {number} delay - Delay in milliseconds
+       * @returns {number} Timeout ID
+       */
+      registerTimeout(callback, delay) {
+        const id = setTimeout(callback, delay);
+        timeouts.add(id);
+        return id;
+      },
+
+      /**
+       * Register a MutationObserver that will be automatically disconnected
+       * @param {MutationObserver} observer - Observer instance
+       * @returns {MutationObserver} The observer for chaining
+       */
+      registerObserver(observer) {
+        observers.add(observer);
+        return observer;
+      },
+
+      /**
+       * Register an event listener that will be automatically removed
+       * @param {EventTarget} target - Element to attach listener to
+       * @param {string} event - Event name
+       * @param {Function} handler - Event handler
+       * @param {Object} options - Event listener options
+       */
+      registerListener(target, event, handler, options) {
+        target.addEventListener(event, handler, options);
+        
+        if (!listeners.has(target)) {
+          listeners.set(target, []);
+        }
+        listeners.get(target).push({ event, handler, options });
+      },
+
+      /**
+       * Manually clear an interval
+       * @param {number} id - Interval ID
+       */
+      clearInterval(id) {
+        clearInterval(id);
+        intervals.delete(id);
+      },
+
+      /**
+       * Manually clear a timeout
+       * @param {number} id - Timeout ID
+       */
+      clearTimeout(id) {
+        clearTimeout(id);
+        timeouts.delete(id);
+      },
+
+      /**
+       * Manually disconnect an observer
+       * @param {MutationObserver} observer - Observer to disconnect
+       */
+      disconnectObserver(observer) {
+        observer.disconnect();
+        observers.delete(observer);
+      },
+
+      /**
+       * Manually remove a listener
+       * @param {EventTarget} target - Element to remove listener from
+       * @param {string} event - Event name
+       * @param {Function} handler - Event handler
+       */
+      removeListener(target, event, handler) {
+        target.removeEventListener(event, handler);
+        
+        const targetListeners = listeners.get(target);
+        if (targetListeners) {
+          const index = targetListeners.findIndex(
+            l => l.event === event && l.handler === handler
+          );
+          if (index !== -1) {
+            targetListeners.splice(index, 1);
+          }
+          if (targetListeners.length === 0) {
+            listeners.delete(target);
+          }
+        }
+      },
+
+      /**
+       * Clean up all registered resources
+       */
+      cleanupAll() {
+        // Clear all intervals
+        intervals.forEach(id => clearInterval(id));
+        intervals.clear();
+
+        // Clear all timeouts
+        timeouts.forEach(id => clearTimeout(id));
+        timeouts.clear();
+
+        // Disconnect all observers
+        observers.forEach(observer => observer.disconnect());
+        observers.clear();
+
+        // Remove all listeners
+        listeners.forEach((listenerList, target) => {
+          listenerList.forEach(({ event, handler }) => {
+            target.removeEventListener(event, handler);
+          });
+        });
+        listeners.clear();
+
+        if (APP_CONFIG.DEBUG) {
+          console.log('🧹 [MYM Cleanup] All resources cleaned up');
+        }
+      },
+
+      /**
+       * Get cleanup statistics
+       */
+      getStats() {
+        return {
+          intervals: intervals.size,
+          timeouts: timeouts.size,
+          observers: observers.size,
+          listeners: Array.from(listeners.values()).reduce((sum, list) => sum + list.length, 0)
+        };
+      }
+    };
+  })();
+
+  if (APP_CONFIG.DEBUG) console.log("✅ [MYM Core] Module loaded");
 })();

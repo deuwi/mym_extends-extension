@@ -23,7 +23,8 @@ $filesToCopy = @(
     "popup.js",
     "popup.css",
     "auth-bridge.js",
-    "detector.js"
+    "detector.js",
+    "theme-sync.js"
 )
 
 foreach ($file in $filesToCopy) {

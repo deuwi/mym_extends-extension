@@ -641,13 +641,13 @@
 
     // Don't inject on /app/myms page (handled by injectNotesButtonsInList)
     if (window.location.pathname === "/app/myms") {
-      // // // console.log("📝 [MYM Notes] On /app/myms page, skipping createNotesButton");
+      if (APP_CONFIG.DEBUG) console.log("📝 [MYM Notes] On /app/myms page, skipping createNotesButton");
       return;
     }
 
     // Don't inject on followers page
     if (window.location.pathname.startsWith("/app/account/my-followers")) {
-      // // // console.log("📝 [MYM Notes] On followers page, skipping createNotesButton");
+      if (APP_CONFIG.DEBUG) console.log("📝 [MYM Notes] On followers page, skipping createNotesButton");
       return;
     }
 
@@ -667,39 +667,13 @@
     );
 
     if (listRowRight) {
-      // Créer le bouton pour list__row__right
+      // Créer le bouton pour list__row__right (même style que /app/myms)
       const button = document.createElement("button");
       button.id = "mym-notes-button";
+      button.className = "button button--icon button--secondary list__row__right__no-border mym-notes-button";
       button.type = "button";
       button.title = "Ouvrir les notes pour cet utilisateur";
-      button.style.cssText = `
-        background: ${getComputedStyle(document.documentElement).getPropertyValue('--mym-theme-gradient').trim() || `linear-gradient(135deg, ${window.APP_CONFIG.PRIMARY_GRADIENT_START} 0%, ${window.APP_CONFIG.PRIMARY_GRADIENT_END} 100%)`};
-        border: 2px solid #3b82f6;
-        border-radius: 50%;
-        color: white;
-        cursor: pointer;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        width: 36px;
-        height: 36px;
-        padding: 0;
-        font-size: 18px;
-        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.15);
-        transition: all 0.2s;
-        margin-right: 8px;
-      `;
       button.textContent = "📝";
-
-      button.addEventListener("mouseenter", () => {
-        button.style.transform = "scale(1.1)";
-        button.style.boxShadow = "0 4px 8px rgba(0, 0, 0, 0.25)";
-      });
-
-      button.addEventListener("mouseleave", () => {
-        button.style.transform = "scale(1)";
-        button.style.boxShadow = "0 2px 4px rgba(0, 0, 0, 0.15)";
-      });
 
       button.addEventListener("click", (e) => {
         e.preventDefault();
@@ -721,7 +695,7 @@
       } else {
         listRowRight.appendChild(button);
       }
-      // // // console.log("📝 [MYM Notes] Button injected in list__row__right");
+      if (APP_CONFIG.DEBUG) console.log("📝 [MYM Notes] Button injected in list__row__right");
     } else if (dropdownMenu) {
       // Créer un élément <li> pour le menu dropdown
       const li = document.createElement("li");
@@ -762,36 +736,16 @@
 
       // Insérer en première position dans le menu
       dropdownMenu.insertBefore(li, dropdownMenu.firstChild);
-      // // // console.log("📝 [MYM Notes] Button injected in dropdown menu");
+      if (APP_CONFIG.DEBUG) console.log("📝 [MYM Notes] Button injected in dropdown menu");
     } else if (chatHeader) {
-      // Style pour le header du chat (fallback)
+      // Style natif pour le header du chat (fallback) - même style que /app/myms
       const button = document.createElement("button");
       button.id = "mym-notes-button";
-      button.textContent = "📝 Notes";
+      button.className = "button button--icon button--secondary mym-notes-button";
+      button.type = "button";
       button.title = "Ouvrir les notes pour cet utilisateur";
-      button.style.cssText = `
-        background: ${getComputedStyle(document.documentElement).getPropertyValue('--mym-theme-gradient').trim() || `linear-gradient(135deg, ${window.APP_CONFIG.PRIMARY_GRADIENT_START} 0%, ${window.APP_CONFIG.PRIMARY_GRADIENT_END} 100%)`};
-        border: none;
-        padding: 8px 16px;
-        border-radius: 8px;
-        color: white;
-        cursor: pointer;
-        font-size: 14px;
-        font-weight: 600;
-        margin-left: 12px;
-        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-        transition: all 0.2s;
-      `;
-
-      button.addEventListener("mouseenter", () => {
-        button.style.transform = "translateY(-2px)";
-        button.style.boxShadow = "0 4px 8px rgba(0,0,0,0.2)";
-      });
-
-      button.addEventListener("mouseleave", () => {
-        button.style.transform = "translateY(0)";
-        button.style.boxShadow = "0 2px 4px rgba(0,0,0,0.1)";
-      });
+      button.textContent = "📝";
+      button.style.cssText = "margin-left: 12px;";
 
       button.addEventListener("click", () => {
         const existingPanel = document.getElementById("mym-notes-panel");
@@ -803,7 +757,7 @@
       });
 
       chatHeader.appendChild(button);
-      // // // console.log("📝 [MYM Notes] Button injected in chat header");
+      if (APP_CONFIG.DEBUG) console.log("📝 [MYM Notes] Button injected in chat header");
     }
   }
 
@@ -823,10 +777,10 @@
    * Initialize notes system (called by main content script)
    */
   function initNotesSystem() {
-    // // // console.log("📝 [MYM Notes] Initializing notes system...");
+    if (APP_CONFIG.DEBUG) console.log("📝 [MYM Notes] Initializing notes system...");
 
     if (!contentAPI.notesEnabled) {
-      // // // console.log("⏸️ [MYM Notes] Notes disabled");
+      if (APP_CONFIG.DEBUG) console.log("⏸️ [MYM Notes] Notes disabled");
       return;
     }
 
@@ -879,5 +833,5 @@
     openNotesForUser,
   };
 
-  // // // console.log("✅ [MYM Notes] Module loaded");
+  if (APP_CONFIG.DEBUG) console.log("✅ [MYM Notes] Module loaded");
 })(window.MYM_CONTENT_API);

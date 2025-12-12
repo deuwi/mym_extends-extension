@@ -19,6 +19,12 @@
   // Use shared utilities from API
   const debounce = contentAPI.debounce;
   const SELECTORS = contentAPI.SELECTORS;
+  const CleanupManager = contentAPI.CleanupManager;
+
+  // Cleanup tracking
+  let refreshInterval = null;
+  let urlObserver = null;
+  let footerObserver = null;
 
   // ========================================
   // MAKE CLONED ROW CLICKABLE
@@ -63,9 +69,9 @@
         : "https://creators.mym.fans/app/myms";
 
       if (searchQuery) {
-        // // // console.log(`🔍 [MYM Conversations] Searching for: "${searchQuery}"`);
+        if (APP_CONFIG.DEBUG) console.log(`🔍 [MYM Conversations] Searching for: "${searchQuery}"`);
       } else {
-        // // // console.log("🔍 [MYM Conversations] Fetching list from /app/myms...");
+        if (APP_CONFIG.DEBUG) console.log("🔍 [MYM Conversations] Fetching list from /app/myms...");
       }
 
       const response = await fetch(url, {
@@ -228,9 +234,7 @@
   function removeSidebarFooter() {
     const footer = document.querySelector("footer.sidebar__footer");
     if (footer) {
-      // console.log(
-      //   "🗑️ [MYM Conversations] Removing entire sidebar footer to save space"
-      // );
+      if (APP_CONFIG.DEBUG) console.log("🗑️ [MYM Conversations] Removing entire sidebar footer to save space");
       footer.remove();
     }
   }
@@ -342,7 +346,7 @@
         if (!rightSection.querySelector(".mym-notes-button")) {
           const notesBtn = document.createElement("button");
           notesBtn.className =
-            "button button--icon button--secondary list__row__right__no-border mym-notes-button";
+            "button mym-notes-button";
           notesBtn.type = "button";
           notesBtn.title = `Ouvrir les notes pour ${username}`;
 
@@ -350,12 +354,16 @@
           notesBtn.style.cssText = `
             min-width: 36px;
             min-height: 36px;
+            width: 36px;
+            height: 100%;
             padding: 0;
+            margin-left: 8px;
             display: flex;
             align-items: center;
             justify-content: center;
-            border-radius: 50%;
             transition: all 0.2s;
+            border: none !important;
+            border-radius:var(--mym-border-radius-circle, 10px);
           `;
 
           notesBtn.textContent = "📝";
@@ -401,7 +409,7 @@
 
     // Log du nombre de nouvelles conversations ajoutées
     if (newConversationsAdded > 0 && !isSearchResult) {
-      // console.log(`✨ [MYM Conversations] ${newConversationsAdded} nouvelle(s) conversation(s) ajoutée(s)`);
+      if (APP_CONFIG.DEBUG) console.log(`✨ [MYM Conversations] ${newConversationsAdded} nouvelle(s) conversation(s) ajoutée(s)`);
     }
 
     // Scanner les badges après le rendu
@@ -445,16 +453,58 @@
         return;
       }
 
-    // Récupérer les conversations initiales
+    // Créer le conteneur principal avec loader
+    const container = document.createElement("div");
+    container.className = "mym-conversations-list";
+    container.style.cssText = `
+      display: flex;
+      flex-direction: column;
+      width: 100%;
+      border-top: 1px solid #2a2d3a;
+    `;
+
+    // Injecter le loader immédiatement
+    container.innerHTML = `
+      <div style="padding: 40px 20px; text-align: center; color: #888;">
+        <div style="display: inline-block; width: 32px; height: 32px; border: 3px solid #667eea; border-top-color: transparent; border-radius: 50%; animation: mym-spin 0.8s linear infinite;"></div>
+        <div style="margin-top: 15px; font-size: 14px; color: #aaa;">Chargement des conversations...</div>
+      </div>
+    `;
+
+    // Ajouter le conteneur avec loader au DOM immédiatement
+    const footer = aside.querySelector(".sidebar__footer");
+    if (footer) {
+      aside.insertBefore(container, footer);
+    } else {
+      aside.appendChild(container);
+    }
+
+    // Ajouter l'animation de spin si pas déjà présente
+    if (!document.getElementById("mym-spin-animation")) {
+      const style = document.createElement("style");
+      style.id = "mym-spin-animation";
+      style.textContent = `
+        @keyframes mym-spin {
+          to { transform: rotate(360deg); }
+        }
+      `;
+      document.head.appendChild(style);
+    }
+
+    // Récupérer les conversations
     const conversations = await fetchConversationsList();
     if (conversations.length === 0) {
-      console.warn("⚠️ [MYM Conversations] No conversations found");
+      container.innerHTML = `
+        <div style="padding: 40px 20px; text-align: center; color: #888;">
+          <div style="font-size: 32px; margin-bottom: 10px;">💬</div>
+          <div style="font-size: 14px;">Aucune conversation trouvée</div>
+        </div>
+      `;
       return;
     }
 
-    // Créer le conteneur principal
-    const container = document.createElement("div");
-    container.className = "mym-conversations-list";
+    // Vider le conteneur et reconstruire avec les données
+    container.innerHTML = '';
     container.style.cssText = `
       display: flex;
       flex-direction: column;
@@ -507,9 +557,9 @@
 
       // Afficher un loader
       listContainer.innerHTML = `
-        <div style="padding: 20px; text-align: center; color: #888;">
-          <div style="display: inline-block; width: 20px; height: 20px; border: 2px solid #667eea; border-top-color: transparent; border-radius: 50%; animation: spin 1s linear infinite;"></div>
-          <div style="margin-top: 10px;">Recherche en cours...</div>
+        <div style="padding: 30px 20px; text-align: center; color: #888;">
+          <div style="display: inline-block; width: 28px; height: 28px; border: 3px solid #667eea; border-top-color: transparent; border-radius: 50%; animation: mym-spin 0.8s linear infinite;"></div>
+          <div style="margin-top: 12px; font-size: 13px; color: #aaa;">Recherche en cours...</div>
         </div>
       `;
 
@@ -541,54 +591,6 @@
 
     // Rendre les conversations initiales
     renderConversationsList(conversations, listContainer, false);
-
-    // Attendre que les stats soient injectées avant d'injecter la liste
-    const waitForStats = () => {
-      const statsBox = aside.querySelector(".mym-user-info-box");
-      const footer = aside.querySelector(".sidebar__footer");
-
-      if (statsBox && footer) {
-        // Insérer entre stats et footer
-        aside.insertBefore(container, footer);
-        // // // console.log("✅ [MYM Conversations] List injected between stats and footer");
-      } else if (statsBox) {
-        // Insérer après la box stats
-        if (statsBox.nextSibling) {
-          aside.insertBefore(container, statsBox.nextSibling);
-        } else {
-          aside.appendChild(container);
-        }
-        // // // console.log("✅ [MYM Conversations] List injected after stats box");
-      } else if (footer) {
-        // Insérer avant le footer
-        aside.insertBefore(container, footer);
-        // // // console.log("✅ [MYM Conversations] List injected before footer");
-      } else {
-        // Fallback: chercher le header de l'aside
-        const asideHeader = aside.querySelector(".sidebar__header");
-        if (asideHeader && asideHeader.nextSibling) {
-          aside.insertBefore(container, asideHeader.nextSibling);
-        } else {
-          aside.appendChild(container);
-        }
-        // // // console.log("✅ [MYM Conversations] List injected (stats/footer not found)");
-      }
-    };
-
-    // Ajouter l'animation de spin pour le loader
-    if (!document.getElementById("mym-spin-animation")) {
-      const style = document.createElement("style");
-      style.id = "mym-spin-animation";
-      style.textContent = `
-        @keyframes spin {
-          to { transform: rotate(360deg); }
-        }
-      `;
-      document.head.appendChild(style);
-    }
-
-    // Attendre un peu que les stats se chargent
-    setTimeout(waitForStats, 100);
     } finally {
       isInjecting = false;
       lastInjectionTime = Date.now();
@@ -604,7 +606,7 @@
     const checkUrlChange = () => {
       const currentUrl = window.location.href;
       if (currentUrl !== lastUrl) {
-        // // // console.log("🔄 [MYM Conversations] Navigation detected");
+        if (APP_CONFIG.DEBUG) console.log("🔄 [MYM Conversations] Navigation detected");
         lastUrl = currentUrl;
         setTimeout(injectConversationsInAside, 1000);
       }
@@ -613,7 +615,7 @@
     // Utiliser l'observer central au lieu de créer un nouveau MutationObserver
     if (contentAPI.centralObserver) {
       contentAPI.centralObserver.register("navigationArea", checkUrlChange);
-      // // // console.log("✅ [MYM Conversations] Registered with central observer (navigationArea)");
+      if (APP_CONFIG.DEBUG) console.log("✅ [MYM Conversations] Registered with central observer (navigationArea)");
     } else {
       // Fallback si central observer pas disponible (ne devrait pas arriver)
       console.warn("⚠️ [MYM Conversations] Central observer not available, using fallback");
@@ -625,19 +627,19 @@
       });
     }
 
-    // Aussi surveiller les clics avec debounce
+    // Aussi surveiller les clics avec debounce (using CleanupManager)
     const debouncedClickCheck = debounce(checkUrlChange, 500);
-    document.addEventListener("click", debouncedClickCheck);
+    CleanupManager.registerListener(document, "click", debouncedClickCheck);
 
-    // Et le popstate (pas de debounce pour event navigateur)
-    window.addEventListener("popstate", checkUrlChange);
+    // Et le popstate (pas de debounce pour event navigateur) (using CleanupManager)
+    CleanupManager.registerListener(window, "popstate", checkUrlChange);
   }
 
   // ========================================
   // INITIALIZATION
   // ========================================
   function init() {
-    // // // console.log("🚀 [MYM Conversations] Module initializing...");
+    if (APP_CONFIG.DEBUG) console.log("🚀 [MYM Conversations] Module initializing...");
 
     // Retirer le footer immédiatement (sur toutes les pages)
     setTimeout(removeSidebarFooter, 500);
@@ -645,7 +647,7 @@
     // Observer pour retirer le footer s'il réapparaît - utiliser central observer
     if (contentAPI.centralObserver) {
       contentAPI.centralObserver.register("navigationArea", removeSidebarFooter);
-      // // // console.log("✅ [MYM Conversations] Footer removal registered with central observer");
+      if (APP_CONFIG.DEBUG) console.log("✅ [MYM Conversations] Footer removal registered with central observer");
     } else {
       // Fallback si central observer pas disponible
       console.warn("⚠️ [MYM Conversations] Central observer not available for footer removal, using fallback");
@@ -736,6 +738,7 @@
         justify-content: center;
         border-radius: 50%;
         transition: all 0.2s;
+        border: none !important;
       `;
       notesBtn.textContent = "📝";
 
@@ -763,8 +766,27 @@
     });
   }
 
-  // Rafraîchir toutes les 30 secondes
-  setInterval(refreshConversationsList, 30000);
+  // Rafraîchir toutes les 30 secondes (avec cleanup manager)
+  if (refreshInterval) {
+    CleanupManager.clearInterval(refreshInterval);
+  }
+  refreshInterval = CleanupManager.registerInterval(refreshConversationsList, 30000);
+
+  // Cleanup function for this module
+  function cleanup() {
+    if (refreshInterval) {
+      CleanupManager.clearInterval(refreshInterval);
+      refreshInterval = null;
+    }
+    if (urlObserver) {
+      CleanupManager.disconnectObserver(urlObserver);
+      urlObserver = null;
+    }
+    if (footerObserver) {
+      CleanupManager.disconnectObserver(footerObserver);
+      footerObserver = null;
+    }
+  }
 
   // Exposer dans l'API
   contentAPI.conversations = {
@@ -774,8 +796,9 @@
     refreshConversationsList,
     removeSidebarFooter,
     reinjectNotesButtons,
+    cleanup,
     init,
   };
 
-  // // // console.log("✅ [MYM Conversations] Module loaded");
+  if (APP_CONFIG.DEBUG) console.log("✅ [MYM Conversations] Module loaded");
 })(window.MYM_CONTENT_API);

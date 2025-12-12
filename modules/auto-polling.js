@@ -24,6 +24,10 @@
   // Use shared utilities from API
   const debounce = contentAPI.debounce;
   const SELECTORS = contentAPI.SELECTORS;
+  const CleanupManager = contentAPI.CleanupManager;
+
+  // Cleanup tracking
+  let navObserver = null;
 
   // ========================================
   // MESSAGE INJECTION FROM HTML PARSING
@@ -106,7 +110,7 @@
 
     // Prevent too frequent polling
     if (now - lastPollTime < 3000) {
-      // // // console.log("⏱️ [MYM Polling] Skipped (too soon)");
+      if (APP_CONFIG.DEBUG) console.log("⏱️ [MYM Polling] Skipped (too soon)");
       return;
     }
 
@@ -189,7 +193,7 @@
   // ========================================
   function startPolling() {
     if (pollingInterval) {
-      // // // console.log("⚠️ [MYM Polling] Already running");
+      if (APP_CONFIG.DEBUG) console.log("⚠️ [MYM Polling] Already running");
       return;
     }
 
@@ -221,7 +225,7 @@
       clearInterval(conversationsPollingInterval);
       conversationsPollingInterval = null;
     }
-    // // // console.log("⏸️ [MYM Polling] Stopped");
+    if (APP_CONFIG.DEBUG) console.log("⏸️ [MYM Polling] Stopped");
   }
 
   function restartPolling() {
@@ -235,11 +239,11 @@
   function handleVisibilityChange() {
     if (document.hidden) {
       isTabVisible = false;
-      // // // console.log("👁️ [MYM Polling] Tab hidden, switching to slow polling");
+      if (APP_CONFIG.DEBUG) console.log("👁️ [MYM Polling] Tab hidden, switching to slow polling");
       restartPolling();
     } else {
       isTabVisible = true;
-      // // // console.log("👁️ [MYM Polling] Tab visible, switching to fast polling");
+      if (APP_CONFIG.DEBUG) console.log("👁️ [MYM Polling] Tab visible, switching to fast polling");
       restartPolling();
       // Poll immediately when tab becomes visible
       setTimeout(pollOnce, 500);
@@ -260,21 +264,36 @@
         const isChatPage = currentUrl.includes("/app/chat/");
 
         if (isChatPage) {
-          // // // console.log("🔄 [MYM Polling] Chat page detected, restarting polling");
+          if (APP_CONFIG.DEBUG) console.log("🔄 [MYM Polling] Chat page detected, restarting polling");
           restartPolling();
         } else {
-          // // // console.log("⏸️ [MYM Polling] Left chat page, stopping polling");
+          if (APP_CONFIG.DEBUG) console.log("⏸️ [MYM Polling] Left chat page, stopping polling");
           stopPolling();
         }
       }
     }, 300);
 
-    const observer = new MutationObserver(checkNavigation);
+    if (navObserver) {
+      CleanupManager.disconnectObserver(navObserver);
+    }
+    navObserver = CleanupManager.registerObserver(new MutationObserver(checkNavigation));
 
-    observer.observe(document.body, {
+    navObserver.observe(document.body, {
       childList: true,
       subtree: false, // Limit to direct children for performance
     });
+  }
+
+  // ========================================
+  // CLEANUP
+  // ========================================
+  function cleanup() {
+    stopPolling();
+    
+    if (navObserver) {
+      CleanupManager.disconnectObserver(navObserver);
+      navObserver = null;
+    }
   }
 
   // ========================================
@@ -287,14 +306,14 @@
       startPolling();
     }
 
-    // Listen to visibility changes
-    document.addEventListener("visibilitychange", handleVisibilityChange);
+    // Listen to visibility changes (using CleanupManager)
+    CleanupManager.registerListener(document, "visibilitychange", handleVisibilityChange);
 
     // Observe navigation
     observeNavigation();
 
-    // Cleanup on page unload
-    window.addEventListener("beforeunload", stopPolling);
+    // Cleanup on page unload (using CleanupManager)
+    CleanupManager.registerListener(window, "beforeunload", cleanup);
   }
 
   // Exposer dans l'API
@@ -303,7 +322,8 @@
     stopPolling,
     pollOnce,
     init,
+    cleanup,
   };
 
-  // // // console.log("✅ [MYM Polling] Module loaded");
+  if (APP_CONFIG.DEBUG) console.log("✅ [MYM Polling] Module loaded");
 })(window.MYM_CONTENT_API);

@@ -158,26 +158,6 @@
   const debounce = contentAPI.debounce;
   const SELECTORS = contentAPI.SELECTORS;
 
-
-  // ========================================
-  // CONFIGURATION & CONSTANTS
-  // ========================================
-  const MESSAGE_SELECTOR = ".chat-message[data-chat-message-id]";
-  const LIST_ROW_SELECTOR =
-    ".list__row, .sidebar__footer__list > div, .discussions__chat";
-  const CONTAINER_SELECTOR = ".discussions__chats, .sidebar__footer__list";
-  const DISCUSSIONS_SELECTOR =
-    ".discussions, .page.my-myms, .sidebar__footer__list";
-  const NAV_SELECTOR = ".aside.sidebar, aside.sidebar";
-
-  const POLL_INTERVAL_MS =
-    (window.APP_CONFIG && window.APP_CONFIG.POLL_INTERVAL_MS) || 10000;
-  const SUBSCRIPTION_CHECK_INTERVAL =
-    (window.APP_CONFIG && window.APP_CONFIG.SUBSCRIPTION_CHECK_INTERVAL) ||
-    5 * 60 * 1000; // 5 minutes
-  const MAX_PAGES_FETCH =
-    (window.APP_CONFIG && window.APP_CONFIG.MAX_PAGES_FETCH) || 10;
-
   // ========================================
   // STATE MANAGEMENT
   // ========================================
@@ -194,12 +174,7 @@
     return;
   }
 
-  let knownChatIds = new Set();
-  let knownListIds = new Set();
-  let pollHandle = null;
   let observer = null;
-  let pollingInProgress = false;
-  let discussionsInjected = false;
 
   // References for cleanup
   let footerObserver = null;
@@ -211,11 +186,9 @@
   let messageListener = null;
   let subscriptionMonitoringInterval = null;
 
-  // Feature flags (initialized from storage)
-  let badgesEnabled = true;
-  let statsEnabled = true;
-  let emojiEnabled = true;
-  let notesEnabled = true;
+  // ⚠️ Plus de variables locales pour features flags
+  // Source unique de vérité : chrome.storage.local + contentAPI
+  // Accès via contentAPI.badgesEnabled, contentAPI.statsEnabled, etc.
 
   // ========================================
   // DETECTOR INJECTION (Page Context)
@@ -428,49 +401,38 @@
   // ========================================
   // FEATURE FLAGS MANAGEMENT
   // ========================================
-  async function readFeatureFlags() {
+  // 🔧 Source unique de vérité : chrome.storage.local
+  // Plus de variables locales redondantes pour éviter les incohérences
+  
+  async function getFeatureState(featureName) {
+    const items = await contentAPI.safeStorageGet("local", [featureName]);
+    return items[featureName] !== false; // Default true si undefined
+  }
+
+  async function syncFeatureFlagsToAPI() {
+    // Synchroniser l'état depuis storage vers l'API partagée
     const items = await contentAPI.safeStorageGet("local", [
-      "badgesEnabled",
-      "statsEnabled",
-      "emojiEnabled",
-      "notesEnabled",
+      "mym_badges_enabled",
+      "mym_stats_enabled",
+      "mym_emoji_enabled",
+      "mym_notes_enabled",
     ]);
 
-    return {
-      badges: items.badgesEnabled !== false,
-      stats: items.statsEnabled !== false,
-      emoji: items.emojiEnabled !== false,
-      notes: items.notesEnabled !== false,
-    };
-  }
-
-  async function readEnabledFlag(defaultValue = true) {
-    const items = await contentAPI.safeStorageGet("local", ["enabled"]);
-    return items.enabled !== false ? defaultValue : false;
-  }
-
-  async function initializeFeatureFlags() {
-    const flags = await readFeatureFlags();
-    badgesEnabled = flags.badges;
-    statsEnabled = flags.stats;
-    emojiEnabled = flags.emoji;
-    notesEnabled = flags.notes;
-
-    // Share flags with modules
-    contentAPI.badgesEnabled = badgesEnabled;
-    contentAPI.statsEnabled = statsEnabled;
-    contentAPI.emojiEnabled = emojiEnabled;
-    contentAPI.notesEnabled = notesEnabled;
-
+    contentAPI.badgesEnabled = items.mym_badges_enabled !== false;
+    contentAPI.statsEnabled = items.mym_stats_enabled !== false;
+    contentAPI.emojiEnabled = items.mym_emoji_enabled !== false;
+    contentAPI.notesEnabled = items.mym_notes_enabled !== false;
   }
 
   // ========================================
   // OBSERVERS & FEATURE INITIALIZATION
   // ========================================
-  function initializeObservers() {
+  async function initializeObservers() {
+    // Synchroniser les flags depuis storage avant d'initialiser
+    await syncFeatureFlagsToAPI();
 
     // Observer for new chat cards (for badges only, clickable rows disabled)
-    if (badgesEnabled && contentAPI.badges) {
+    if (contentAPI.badgesEnabled && contentAPI.badges) {
       
       // Utiliser le central observer au lieu de créer un nouveau MutationObserver
       if (contentAPI.centralObserver) {
@@ -513,14 +475,14 @@
     }
 
     // Initial scan for badges
-    if (badgesEnabled && contentAPI.badges) {
+    if (contentAPI.badgesEnabled && contentAPI.badges) {
       setTimeout(() => {
         contentAPI.badges.scanExistingListsForBadges();
       }, 1000);
     }
 
     // Initialize emoji picker
-    if (emojiEnabled && contentAPI.emoji) {
+    if (contentAPI.emojiEnabled && contentAPI.emoji) {
       contentAPI.emoji.initEmojiPicker();
 
       // Ajouter les boutons emoji aux inputs existants
@@ -563,7 +525,7 @@
     }
 
     // Initialize notes system
-    if (notesEnabled && contentAPI.notes) {
+    if (contentAPI.notesEnabled && contentAPI.notes) {
       contentAPI.notes.initNotesSystem();
 
       // Ajouter le bouton notes immédiatement
@@ -617,7 +579,7 @@
     }
 
     // Initialize stats box
-    if (statsEnabled && contentAPI.stats && isChatPage) {
+    if (contentAPI.statsEnabled && contentAPI.stats && isChatPage) {
       const username = contentAPI.getCurrentConversationUsername();
       if (username) {
         contentAPI.stats.injectUserInfoBox(username);
@@ -636,31 +598,22 @@
 
     messageListener = (message, sender, sendResponse) => {
       if (message.action === "featuresEnabled") {
-        readFeatureFlags().then((flags) => {
-          badgesEnabled = flags.badges;
-          statsEnabled = flags.stats;
-          emojiEnabled = flags.emoji;
-          notesEnabled = flags.notes;
-
-          // Update module flags
-          contentAPI.badgesEnabled = badgesEnabled;
-          contentAPI.statsEnabled = statsEnabled;
-          contentAPI.emojiEnabled = emojiEnabled;
-          contentAPI.notesEnabled = notesEnabled;
+        // Synchroniser depuis storage (source unique de vérité)
+        syncFeatureFlagsToAPI().then(() => {
 
           // Re-initialize enabled features
-          if (badgesEnabled && contentAPI.badges && contentAPI.badges.scanExistingListsForBadges) {
+          if (contentAPI.badgesEnabled && contentAPI.badges && contentAPI.badges.scanExistingListsForBadges) {
             setTimeout(() => contentAPI.badges.scanExistingListsForBadges(), 500);
           }
           
-          if (statsEnabled && contentAPI.stats && contentAPI.stats.injectUserInfoBox) {
+          if (contentAPI.statsEnabled && contentAPI.stats && contentAPI.stats.injectUserInfoBox) {
             const username = contentAPI.getCurrentConversationUsername();
             if (username) {
               setTimeout(() => contentAPI.stats.injectUserInfoBox(username), 500);
             }
           }
           
-          if (emojiEnabled && contentAPI.emoji && contentAPI.emoji.addEmojiButtonToInput) {
+          if (contentAPI.emojiEnabled && contentAPI.emoji && contentAPI.emoji.addEmojiButtonToInput) {
             const inputs = document.querySelectorAll('textarea[placeholder*="message"], textarea[name="message"]');
             inputs.forEach(input => {
               const container = input.closest('.form-message, .message-input-container, .chat-input');
@@ -670,7 +623,7 @@
             });
           }
           
-          if (notesEnabled && contentAPI.notes && contentAPI.notes.createNotesButton) {
+          if (contentAPI.notesEnabled && contentAPI.notes && contentAPI.notes.createNotesButton) {
             const chatHeader = document.querySelector(SELECTORS.CHAT_HEADER);
             if (chatHeader && !chatHeader.querySelector('#mym-notes-button')) {
               setTimeout(() => contentAPI.notes.createNotesButton(), 500);
@@ -682,34 +635,25 @@
       }
 
       if (message.action === "featuresDisabled") {
-        // Disable features flags
-        badgesEnabled = false;
-        statsEnabled = false;
-        emojiEnabled = false;
-        notesEnabled = false;
+        // Synchroniser depuis storage (toutes à false)
+        syncFeatureFlagsToAPI().then(() => {
+          // Remove UI elements from DOM instead of reloading
+          if (contentAPI.badges && contentAPI.badges.removeBadgesUI) {
+            contentAPI.badges.removeBadgesUI();
+          }
+          if (contentAPI.stats && contentAPI.stats.removeStatsBox) {
+            contentAPI.stats.removeStatsBox();
+          }
+          if (contentAPI.emoji && contentAPI.emoji.removeEmojiUI) {
+            contentAPI.emoji.removeEmojiUI();
+          }
+          if (contentAPI.notes && contentAPI.notes.removeNotesUI) {
+            contentAPI.notes.removeNotesUI();
+          }
 
-        // Update module flags
-        contentAPI.badgesEnabled = false;
-        contentAPI.statsEnabled = false;
-        contentAPI.emojiEnabled = false;
-        contentAPI.notesEnabled = false;
-
-        // Remove UI elements from DOM instead of reloading
-        if (contentAPI.badges && contentAPI.badges.removeBadgesUI) {
-          contentAPI.badges.removeBadgesUI();
-        }
-        if (contentAPI.stats && contentAPI.stats.removeStatsBox) {
-          contentAPI.stats.removeStatsBox();
-        }
-        if (contentAPI.emoji && contentAPI.emoji.removeEmojiUI) {
-          contentAPI.emoji.removeEmojiUI();
-        }
-        if (contentAPI.notes && contentAPI.notes.removeNotesUI) {
-          contentAPI.notes.removeNotesUI();
-        }
-
-        // Stop polling (handled by auto-polling.js)
-        console.log("🛑 [MYM] All features disabled and UI elements removed");
+          // Stop polling (handled by auto-polling.js)
+          console.log("🛑 [MYM] All features disabled and UI elements removed");
+        });
       }
 
       if (message.type === "REFRESH_FIREBASE_TOKEN") {
@@ -775,7 +719,7 @@
 
       if (message.action === "disableAllFeatures") {
         // Désactiver toutes les fonctionnalités
-        // // console.log("🔄 [MYM] Disabling all features");
+        if (APP_CONFIG.DEBUG) console.log("🔄 [MYM] Disabling all features");
         
         // Désactiver les badges
         contentAPI.badgesEnabled = false;
@@ -977,7 +921,9 @@
       button[class*="mym-"],
       .button.button--primary {
         background: ${theme.gradient} !important;
-        border: ${theme.gradient} 1px solid !important;
+        border: none !important;
+        min-width: 32px !important;
+        min-height: 32px !important;
       }
 
       .mym-notes-button:hover,
@@ -1076,9 +1022,32 @@
   // CLEANUP
   // ========================================
   function cleanupAll() {
-    // NOTE: Polling nettoyé par auto-polling.js
+    // Stop subscription monitoring
     stopSubscriptionMonitoring();
 
+    // Clean up all module resources via CleanupManager
+    if (contentAPI.CleanupManager) {
+      contentAPI.CleanupManager.cleanupAll();
+    }
+
+    // Clean up individual modules
+    if (contentAPI.polling && contentAPI.polling.cleanup) {
+      contentAPI.polling.cleanup();
+    }
+    if (contentAPI.conversations && contentAPI.conversations.cleanup) {
+      contentAPI.conversations.cleanup();
+    }
+    if (contentAPI.notes && contentAPI.notes.cleanup) {
+      contentAPI.notes.cleanup();
+    }
+    if (contentAPI.sidebarToggle && contentAPI.sidebarToggle.cleanup) {
+      contentAPI.sidebarToggle.cleanup();
+    }
+    if (contentAPI.mymsClickableRows && contentAPI.mymsClickableRows.cleanup) {
+      contentAPI.mymsClickableRows.cleanup();
+    }
+
+    // Legacy cleanup for old observers not using CleanupManager
     if (observer) {
       observer.disconnect();
       observer = null;
@@ -1119,17 +1088,47 @@
       messageListener = null;
     }
 
+    if (APP_CONFIG.DEBUG) {
+      console.log("🧹 [MYM] Complete cleanup finished");
+    }
   }
 
   window.addEventListener("beforeunload", cleanupAll);
 
+  // ========================================
+  // STORAGE CHANGE LISTENER
+  // ========================================
+  // 🔄 Maintenir la synchronisation automatique avec chrome.storage.local
+  chrome.storage.onChanged.addListener((changes, areaName) => {
+    if (areaName !== 'local') return;
+    
+    // Synchroniser les flags si une feature change
+    const featureKeys = [
+      'mym_badges_enabled',
+      'mym_stats_enabled', 
+      'mym_emoji_enabled',
+      'mym_notes_enabled'
+    ];
+    
+    const featureChanged = featureKeys.some(key => key in changes);
+    
+    if (featureChanged) {
+      // Resynchroniser l'API avec le storage
+      syncFeatureFlagsToAPI().then(() => {
+        console.log('🔄 [MYM] Feature flags synchronized from storage');
+      });
+    }
+  });
 
   // ========================================
   // INITIALIZATION
   // ========================================
   (async function init() {
 
-    // 1. Vérifier d'abord si les fonctionnalités sont activées (check background.js flags)
+    // 1. Synchroniser les flags depuis storage (source unique de vérité)
+    await syncFeatureFlagsToAPI();
+
+    // 2. Vérifier si au moins une fonctionnalité est activée
     const mainFlags = await contentAPI.safeStorageGet("local", [
       "mym_live_enabled",
       "mym_badges_enabled",
@@ -1143,15 +1142,6 @@
       console.log(
         "⏸️ [MYM] Toutes les fonctionnalités sont désactivées - extension non chargée"
       );
-      return;
-    }
-
-    // 2. Initialize feature flags
-    await initializeFeatureFlags();
-
-    // 3. Check if extension is enabled
-    const isEnabled = await readEnabledFlag(true);
-    if (!isEnabled) {
       return;
     }
 

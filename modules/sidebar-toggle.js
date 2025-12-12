@@ -11,22 +11,26 @@
   // Use shared utilities from API
   const debounce = contentAPI.debounce;
   const SELECTORS = contentAPI.SELECTORS;
+  const CleanupManager = contentAPI.CleanupManager;
+
+  // Cleanup tracking
+  let buttonObserver = null;
 
   /**
    * Create and inject the sidebar toggle button
    */
   function createSidebarToggleButton() {
-    // console.log("📱 Creating sidebar toggle button...");
+    if (APP_CONFIG.DEBUG) console.log("📱 Creating sidebar toggle button...");
 
     // Don't inject on /app/myms page
     if (window.location.pathname === "/app/myms") {
-      // console.log("📱 On /app/myms page, skipping sidebar toggle");
+      if (APP_CONFIG.DEBUG) console.log("📱 On /app/myms page, skipping sidebar toggle");
       return;
     }
 
     // Check if button already exists
     if (document.getElementById("mym-sidebar-toggle")) {
-      // console.log("📱 Button already exists, skipping");
+      if (APP_CONFIG.DEBUG) console.log("📱 Button already exists, skipping");
       return;
     }
 
@@ -39,6 +43,20 @@
       margin-right: 8px;
       display: inline-flex;
       font-size: 20px;
+      background: linear-gradient(135deg, rgb(95, 95, 95) 0%, rgb(29, 29, 29) 100%); 
+      border-radius: 50%; width: 28px; 
+      border: none;
+      height: 28px; 
+      padding: 0px; 
+      font-size: 20px; 
+      cursor: pointer; 
+      display: flex; 
+      align-items: center; 
+      justify-content: center; 
+      box-shadow: rgba(0, 0, 0, 0.1) 0px 2px 4px; 
+      transition: 0.2s; 
+      z-index: 1000; 
+      transform: scale(1);
     `;
 
     button.innerHTML = `
@@ -49,21 +67,21 @@
 
     // Find the list__row__left container
     const listRowLeft = document.querySelector(".list__row__left");
-    // console.log("📱 Searching for .list__row__left:", listRowLeft ? "FOUND" : "NOT FOUND");
+    if (APP_CONFIG.DEBUG) console.log("📱 Searching for .list__row__left:", listRowLeft ? "FOUND" : "NOT FOUND");
 
     if (listRowLeft) {
       // Insert after the back button
       const backButton = listRowLeft.querySelector(SELECTORS.LIST_ROW_LEFT_BACK);
-      // console.log("📱 Back button found:", backButton ? "YES" : "NO");
+      if (APP_CONFIG.DEBUG) console.log("📱 Back button found:", backButton ? "YES" : "NO");
 
       if (backButton && backButton.nextSibling) {
         listRowLeft.insertBefore(button, backButton.nextSibling);
-        // console.log("✅ Button inserted after back button");
+        if (APP_CONFIG.DEBUG) console.log("✅ Button inserted after back button");
       } else {
         listRowLeft.insertBefore(button, listRowLeft.firstChild);
-        // console.log("✅ Button inserted at start of list__row__left");
+        if (APP_CONFIG.DEBUG) console.log("✅ Button inserted at start of list__row__left");
       }
-      // console.log("✅ Sidebar toggle button injected in list__row__left");
+      if (APP_CONFIG.DEBUG) console.log("✅ Sidebar toggle button injected in list__row__left");
 
       // Check visibility after insertion
       setTimeout(() => {
@@ -88,10 +106,10 @@
     // Show button only when aside is hidden (display: none)
     if (asideDisplay === "none") {
       button.style.display = "inline-flex";
-      // console.log("📱 Sidebar toggle visible (aside hidden)");
+      if (APP_CONFIG.DEBUG) console.log("📱 Sidebar toggle visible (aside hidden)");
     } else {
       button.style.display = "none";
-      // console.log("📱 Sidebar toggle hidden (aside visible)");
+      if (APP_CONFIG.DEBUG) console.log("📱 Sidebar toggle hidden (aside visible)");
     }
   }
 
@@ -208,7 +226,7 @@
    * Initialize the sidebar toggle
    */
   function init() {
-    // console.log("📱 Sidebar Toggle: Initializing...");
+    if (APP_CONFIG.DEBUG) console.log("📱 Sidebar Toggle: Initializing...");
 
     // Try immediate injection
     setTimeout(() => {
@@ -231,25 +249,37 @@
 
       // If no button but list__row__left exists, inject it
       if (!button && listRowLeft) {
-        // console.log("📱 Detected list__row__left, injecting button...");
+        if (APP_CONFIG.DEBUG) console.log("📱 Detected list__row__left, injecting button...");
         createSidebarToggleButton();
       }
     }, 200);
 
-    const observer = new MutationObserver(checkButtonInjection);
+    if (buttonObserver) {
+      CleanupManager.disconnectObserver(buttonObserver);
+    }
+    buttonObserver = CleanupManager.registerObserver(new MutationObserver(checkButtonInjection));
 
-    observer.observe(document.body, {
+    buttonObserver.observe(document.body, {
       childList: true,
       subtree: false, // Limit to direct children for performance
     });
 
-    // console.log("✅ Sidebar Toggle: Initialized");
+    if (APP_CONFIG.DEBUG) console.log("✅ Sidebar Toggle: Initialized");
+  }
+
+  // Cleanup function
+  function cleanup() {
+    if (buttonObserver) {
+      CleanupManager.disconnectObserver(buttonObserver);
+      buttonObserver = null;
+    }
   }
 
   // Export public API
   contentAPI.sidebarToggle = {
     init,
+    cleanup,
   };
 
-  // console.log("✅ [MYM Sidebar Toggle] Module loaded");
+  if (APP_CONFIG.DEBUG) console.log("✅ [MYM Sidebar Toggle] Module loaded");
 })();

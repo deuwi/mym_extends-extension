@@ -11,7 +11,7 @@
    */
   async function injectUserInfoBox(username) {
     if (!username || !contentAPI.statsEnabled) {
-      // // // console.log("⏸️ [MYM Stats] No username or stats disabled");
+      if (APP_CONFIG.DEBUG) console.log("⏸️ [MYM Stats] No username or stats disabled");
       const existingBox = document.getElementById("mym-user-info-box");
       if (existingBox) existingBox.remove();
       currentUserInfoBoxUsername = null;
@@ -19,7 +19,7 @@
     }
 
     if (isUpdatingUserInfoBox && currentUserInfoBoxUsername === username) {
-      // // // console.log("⏭️ [MYM Stats] Already updating for this user");
+      if (APP_CONFIG.DEBUG) console.log("⏭️ [MYM Stats] Already updating for this user");
       return;
     }
 
@@ -30,7 +30,7 @@
       let userInfoBox = document.getElementById("mym-user-info-box");
 
       if (!userInfoBox) {
-        // // // console.log("🎨 [MYM Stats] Creating new stats box");
+        if (APP_CONFIG.DEBUG) console.log("🎨 [MYM Stats] Creating new stats box");
         userInfoBox = document.createElement("div");
         userInfoBox.id = "mym-user-info-box";
         
@@ -45,12 +45,11 @@
           margin-bottom: 8px;
           color: white;
           box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-          border: 2px solid #3b82f6;
         `;
 
         const sidebarSection = document.querySelector(".sidebar__section");
         if (sidebarSection) {
-          // // // console.log("✅ [MYM Stats] Inserting box into sidebar");
+          if (APP_CONFIG.DEBUG) console.log("✅ [MYM Stats] Inserting box into sidebar");
           sidebarSection.insertBefore(userInfoBox, sidebarSection.firstChild);
         } else {
           console.error("❌ [MYM Stats] Sidebar section not found!");
@@ -59,7 +58,7 @@
           return;
         }
       } else {
-        // // // console.log("♻️ [MYM Stats] Reusing existing box");
+        if (APP_CONFIG.DEBUG) console.log("♻️ [MYM Stats] Reusing existing box");
         // Mettre à jour le gradient si le thème a changé
         const gradient = getComputedStyle(document.documentElement).getPropertyValue('--mym-theme-gradient').trim();
         if (gradient) {
@@ -326,5 +325,5 @@
     removeStatsBox,
   };
 
-  // // // console.log("✅ [MYM Stats] Module loaded");
+  if (APP_CONFIG.DEBUG) console.log("✅ [MYM Stats] Module loaded");
 })(window.MYM_CONTENT_API);
