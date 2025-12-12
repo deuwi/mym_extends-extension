@@ -292,7 +292,6 @@
           
           // Si la conversation n'est plus dans la liste fetchée, la retirer
           if (!fetchedChatIds.has(chatId) && !isSearchResult) {
-            console.log(`🗑️ [MYM Conversations] Removing conversation ${chatId} (no longer in list)`);
             row.remove();
           }
         }
@@ -349,8 +348,8 @@
 
           // Ajouter des styles pour un cercle bien proportionné
           notesBtn.style.cssText = `
-            width: 36px;
-            height: 36px;
+            min-width: 36px;
+            min-height: 36px;
             padding: 0;
             display: flex;
             align-items: center;
@@ -597,7 +596,7 @@
   }
 
   // ========================================
-  // OBSERVER POUR DÉTECTER NAVIGATION
+  // OBSERVER POUR DÉTECTER NAVIGATION - UTILISE CENTRAL OBSERVER
   // ========================================
   function observeNavigation() {
     let lastUrl = window.location.href;
@@ -611,13 +610,20 @@
       }
     };
 
-    // Observer le DOM pour détecter les changements de page (SPA) avec debounce
-    const debouncedCheckUrl = debounce(checkUrlChange, 300);
-    const observer = new MutationObserver(debouncedCheckUrl);
-    observer.observe(document.body, {
-      childList: true,
-      subtree: false, // Limit to direct children for performance
-    });
+    // Utiliser l'observer central au lieu de créer un nouveau MutationObserver
+    if (contentAPI.centralObserver) {
+      contentAPI.centralObserver.register("navigationArea", checkUrlChange);
+      // // // console.log("✅ [MYM Conversations] Registered with central observer (navigationArea)");
+    } else {
+      // Fallback si central observer pas disponible (ne devrait pas arriver)
+      console.warn("⚠️ [MYM Conversations] Central observer not available, using fallback");
+      const debouncedCheckUrl = debounce(checkUrlChange, 300);
+      const observer = new MutationObserver(debouncedCheckUrl);
+      observer.observe(document.body, {
+        childList: true,
+        subtree: false,
+      });
+    }
 
     // Aussi surveiller les clics avec debounce
     const debouncedClickCheck = debounce(checkUrlChange, 500);
@@ -636,16 +642,22 @@
     // Retirer le footer immédiatement (sur toutes les pages)
     setTimeout(removeSidebarFooter, 500);
 
-    // Observer pour retirer le footer s'il réapparaît avec debounce
-    const debouncedRemoveFooter = debounce(removeSidebarFooter, 200);
-    const footerObserver = new MutationObserver(debouncedRemoveFooter);
-
-    const aside = document.querySelector("aside.sidebar");
-    if (aside) {
-      footerObserver.observe(aside, {
-        childList: true,
-        subtree: false, // Direct children only for better performance
-      });
+    // Observer pour retirer le footer s'il réapparaît - utiliser central observer
+    if (contentAPI.centralObserver) {
+      contentAPI.centralObserver.register("navigationArea", removeSidebarFooter);
+      // // // console.log("✅ [MYM Conversations] Footer removal registered with central observer");
+    } else {
+      // Fallback si central observer pas disponible
+      console.warn("⚠️ [MYM Conversations] Central observer not available for footer removal, using fallback");
+      const debouncedRemoveFooter = debounce(removeSidebarFooter, 200);
+      const footerObserver = new MutationObserver(debouncedRemoveFooter);
+      const aside = document.querySelector("aside.sidebar");
+      if (aside) {
+        footerObserver.observe(aside, {
+          childList: true,
+          subtree: false,
+        });
+      }
     }
 
     // Injecter la liste si on est sur une page de chat

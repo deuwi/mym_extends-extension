@@ -310,6 +310,16 @@
     currentUserInfoBoxUsername = null;
   }
 
+  // Écouter les changements de thème
+  document.addEventListener('mymThemeChanged', (event) => {
+    const userInfoBox = document.getElementById("mym-user-info-box");
+    if (userInfoBox && event.detail) {
+      const gradient = event.detail.theme.gradient;
+      console.log(`🎨 [MYM Stats] Updating box theme to: ${event.detail.themeName}`);
+      userInfoBox.style.background = gradient;
+    }
+  });
+
   // Export public API
   contentAPI.stats = {
     injectUserInfoBox,

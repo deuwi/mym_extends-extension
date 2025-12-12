@@ -434,14 +434,15 @@
 
       /* Theme Selector */
       .theme-section {
-        margin-top: 16px;
-        padding-top: 16px;
-        border-top: 2px solid #1a1a1a;
+        background: rgba(139, 155, 255, 0.05);
+        border-radius: 8px;
+        padding: 16px;
+        margin: 16px 0;
       }
 
       .theme-title {
         font-size: 14px;
-        font-weight: 600;
+        font-weight: 700;
         color: #e0e0e0;
         margin-bottom: 12px;
         display: flex;
@@ -451,32 +452,34 @@
 
       .theme-grid {
         display: grid;
-        grid-template-columns: repeat(2, 1fr);
-        gap: 8px;
+        grid-template-columns: 1fr 1fr;
+        gap: 10px;
       }
 
       .theme-option {
-        padding: 10px;
+        background: rgba(255, 255, 255, 0.05);
+        border: 2px solid transparent;
         border-radius: 8px;
-        border: 2px solid #1a1a1a;
+        padding: 12px;
         cursor: pointer;
-        transition: all 0.3s ease;
+        transition: all 0.3s;
         display: flex;
         flex-direction: column;
-        gap: 6px;
+        gap: 8px;
       }
 
       .theme-option:hover {
-        border-color: #444;
+        background: rgba(255, 255, 255, 0.08);
+        transform: translateY(-2px);
       }
 
       .theme-option.active {
-        border-color: var(--theme-primary, #667eea);
-        background: rgba(102, 126, 234, 0.1);
+        border-color: #8b9bff;
+        background: rgba(139, 155, 255, 0.15);
       }
 
       .theme-name {
-        font-size: 12px;
+        font-size: 13px;
         font-weight: 600;
         color: #e0e0e0;
       }
@@ -484,15 +487,14 @@
       .theme-preview {
         display: flex;
         gap: 4px;
-        align-items: center;
+        height: 20px;
       }
 
       .theme-color {
-        width: 20px;
-        height: 20px;
+        flex: 1;
         border-radius: 4px;
-        border: 1px solid rgba(255, 255, 255, 0.2);
       }
+
     </style>
   </head>
   <body>
@@ -551,62 +553,16 @@
         <button id="logoutBtn" class="btn-logout">Déconnexion</button>
       </div>
 
-
-
       <!-- Section Thème -->
       <div class="theme-section">
         <div class="theme-title">
           <span>🎨</span>
-          <span>Thème de couleur</span>
+          <span>Thème</span>
         </div>
-        <div class="theme-grid">
-          <div class="theme-option" data-theme="default">
-            <div class="theme-name">Violet</div>
-            <div class="theme-preview">
-              <div class="theme-color" style="background: #667eea"></div>
-              <div class="theme-color" style="background: #764ba2"></div>
-            </div>
-          </div>
-          <div class="theme-option" data-theme="dark">
-            <div class="theme-name">Sombre</div>
-            <div class="theme-preview">
-              <div class="theme-color" style="background: #434343"></div>
-              <div class="theme-color" style="background: #000000"></div>
-            </div>
-          </div>
-          <div class="theme-option" data-theme="blue">
-            <div class="theme-name">Bleu</div>
-            <div class="theme-preview">
-              <div class="theme-color" style="background: #4facfe"></div>
-              <div class="theme-color" style="background: #00f2fe"></div>
-            </div>
-          </div>
-          <div class="theme-option" data-theme="green">
-            <div class="theme-name">Vert</div>
-            <div class="theme-preview">
-              <div class="theme-color" style="background: #43e97b"></div>
-              <div class="theme-color" style="background: #38f9d7"></div>
-            </div>
-          </div>
-          <div class="theme-option" data-theme="pink">
-            <div class="theme-name">Rose</div>
-            <div class="theme-preview">
-              <div class="theme-color" style="background: #f857a6"></div>
-              <div class="theme-color" style="background: #ff5858"></div>
-            </div>
-          </div>
-          <div class="theme-option" data-theme="orange">
-            <div class="theme-name">Orange</div>
-            <div class="theme-preview">
-              <div class="theme-color" style="background: #fa709a"></div>
-              <div class="theme-color" style="background: #fee140"></div>
-            </div>
-          </div>
+        <div class="theme-grid" id="themeGrid">
+          <!-- Les options de thème seront insérées par JavaScript -->
         </div>
       </div>
-
-      <hr class="section-divider" />
-
 
       <!-- Lien vers le site web -->
       <div class="link-container">

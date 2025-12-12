@@ -143,7 +143,6 @@
       }
     `;
     document.head.appendChild(style);
-    // // // // console.log("🎨 [MYM] Global styles injected");
   })();
 
   // Verify modules are loaded
@@ -159,7 +158,6 @@
   const debounce = contentAPI.debounce;
   const SELECTORS = contentAPI.SELECTORS;
 
-  // // // // console.log("🚀 [MYM Content] Starting main orchestrator...");
 
   // ========================================
   // CONFIGURATION & CONSTANTS
@@ -193,7 +191,6 @@
   const isChatPage = !!chatId;
 
   if (!chatId && !isMymsPage && !isFollowersPage) {
-    // // // // console.log("🔍 [MYM] Not a handled page, exiting");
     return;
   }
 
@@ -265,22 +262,24 @@
             el.parentNode.removeChild(el);
           }
         });
-        // // console.log(`🚫 [MYM] Removed ${details.length} <details> tag(s)`);
       }
     }
 
     // Remove on page load
     removeAllDetails();
 
-    // Watch for new details tags
-    const observer = new MutationObserver(() => {
-      removeAllDetails();
-    });
+    // Watch for new details tags - observer uniquement le main content
+    const mainContent = document.querySelector('.site-content, main, .main');
+    if (mainContent) {
+      const observer = new MutationObserver(() => {
+        removeAllDetails();
+      });
 
-    observer.observe(document.body, {
-      childList: true,
-      subtree: true
-    });
+      observer.observe(mainContent, {
+        childList: true,
+        subtree: true
+      });
+    }
   })();
 
   // ========================================
@@ -354,15 +353,22 @@
                          result.agency_license_active;
         
         if (!hasAccess) {
-          console.warn("⚠️ [MYM] Abonnement expiré - désactivation des fonctionnalités");
+          console.warn("⚠️ [MYM] Abonnement expiré - désactivation de toutes les fonctionnalités");
+          // Aucune fonctionnalité disponible en mode gratuit - tout désactiver
           await chrome.storage.local.set({
             mym_live_enabled: false,
             mym_badges_enabled: false,
             mym_stats_enabled: false,
             mym_emoji_enabled: false,
             mym_notes_enabled: false,
+            subscription_active: false
           });
-          window.location.reload();
+          
+          // Afficher une bannière d'expiration
+          showSubscriptionExpiredBanner();
+          
+          // Recharger pour appliquer les changements
+          setTimeout(() => window.location.reload(), 2000);
         }
       } catch (err) {
         // Don't log error if extension context is invalidated
@@ -456,83 +462,58 @@
     contentAPI.emojiEnabled = emojiEnabled;
     contentAPI.notesEnabled = notesEnabled;
 
-    // // // // console.log("🔧 [MYM] Feature flags:", flags);
-  }
-
-  // ========================================
-  // MESSAGE POLLING
-  // ========================================
-  // NOTE: Le polling des messages est maintenant géré par modules/auto-polling.js
-  // qui parse le HTML au lieu d'utiliser l'API JSON (qui n'existe pas)
-
-  // ========================================
-  // MAKE LIST ROWS CLICKABLE
-  // ========================================
-  function makeRowClickable(row) {
-    // Désactivé : la ligne entière (content-search-bar et list__row) ne doit plus être cliquable
-    // pour éviter les redirections non désirées vers la même page
-    return;
-  }
-
-  function makeListRowsClickable() {
-    // Désactivé : les lignes ne doivent plus être cliquables
-    return;
   }
 
   // ========================================
   // OBSERVERS & FEATURE INITIALIZATION
   // ========================================
   function initializeObservers() {
-    // // // // console.log("🔍 [MYM] Initializing observers...");
-    // // // // console.log("🔍 [MYM] Available modules:", Object.keys(contentAPI));
-
-    // Désactivé : les lignes ne doivent plus être cliquables
-    // makeListRowsClickable();
 
     // Observer for new chat cards (for badges only, clickable rows disabled)
     if (badgesEnabled && contentAPI.badges) {
-      // // // // console.log("✅ [MYM] Setting up badges observer");
       
-      // Debounced callback to reduce excessive mutations processing
-      const processBadgeMutations = debounce((mutations) => {
-        mutations.forEach((mutation) => {
-          mutation.addedNodes.forEach((node) => {
-            if (node.nodeType === 1) {
-              const cards = node.querySelectorAll
-                ? node.querySelectorAll(LIST_ROW_SELECTOR)
-                : [];
-              if (node.matches && node.matches(LIST_ROW_SELECTOR)) {
-                contentAPI.badges.scanSingleCard(node);
-                // Désactivé : makeRowClickable(node);
-              }
-              cards.forEach((card) => {
-                contentAPI.badges.scanSingleCard(card);
-                // Désactivé : makeRowClickable(card);
-              });
-            }
-          });
+      // Utiliser le central observer au lieu de créer un nouveau MutationObserver
+      if (contentAPI.centralObserver) {
+        contentAPI.centralObserver.register("conversationsList", () => {
+          if (contentAPI.badges) {
+            contentAPI.badges.scanExistingListsForBadges();
+          }
         });
-      }, 200); // Debounce 200ms to batch rapid DOM changes
-
-      observer = new MutationObserver(processBadgeMutations);
-
-      const discussionsContainer = document.querySelector(DISCUSSIONS_SELECTOR);
-      if (discussionsContainer) {
-        observer.observe(discussionsContainer, {
-          childList: true,
-          subtree: false, // Limited to direct children for better performance
-        });
-        // // // // console.log("✅ [MYM] Badges observer attached");
       } else {
-        console.warn("⚠️ [MYM] Discussions container not found");
+        console.warn("⚠️ [MYM] Central observer not available for badges, using fallback");
+        const processBadgeMutations = debounce((mutations) => {
+          mutations.forEach((mutation) => {
+            mutation.addedNodes.forEach((node) => {
+              if (node.nodeType === 1) {
+                const cards = node.querySelectorAll
+                  ? node.querySelectorAll(LIST_ROW_SELECTOR)
+                  : [];
+                if (node.matches && node.matches(LIST_ROW_SELECTOR)) {
+                  contentAPI.badges.scanSingleCard(node);
+                }
+                cards.forEach((card) => {
+                  contentAPI.badges.scanSingleCard(card);
+                });
+              }
+            });
+          });
+        }, 200);
+
+        observer = new MutationObserver(processBadgeMutations);
+
+        const discussionsContainer = document.querySelector(DISCUSSIONS_SELECTOR);
+        if (discussionsContainer) {
+          observer.observe(discussionsContainer, {
+            childList: true,
+            subtree: false,
+          });
+        }
       }
     } else {
-      // // // // console.log("⏸️ [MYM] Badges disabled or module not loaded");
     }
 
     // Initial scan for badges
     if (badgesEnabled && contentAPI.badges) {
-      // // // // console.log("🔍 [MYM] Scanning existing lists for badges...");
       setTimeout(() => {
         contentAPI.badges.scanExistingListsForBadges();
       }, 1000);
@@ -540,7 +521,6 @@
 
     // Initialize emoji picker
     if (emojiEnabled && contentAPI.emoji) {
-      // // // // console.log("😊 [MYM] Initializing emoji picker");
       contentAPI.emoji.initEmojiPicker();
 
       // Ajouter les boutons emoji aux inputs existants
@@ -551,29 +531,39 @@
         });
       }, 1000);
 
-      // Observer pour les nouveaux inputs avec debounce
-      const processEmojiMutations = debounce(() => {
-        const inputFields = document.querySelectorAll(".input__field");
-        inputFields.forEach((field) => {
-          if (!field.querySelector(".mym-emoji-trigger")) {
-            contentAPI.emoji.addEmojiButtonToInput(field);
-          }
+      // Observer pour les nouveaux inputs - utiliser central observer
+      if (contentAPI.centralObserver) {
+        contentAPI.centralObserver.register("inputsArea", () => {
+          const inputFields = document.querySelectorAll(".input__field");
+          inputFields.forEach((field) => {
+            if (!field.querySelector(".mym-emoji-trigger")) {
+              contentAPI.emoji.addEmojiButtonToInput(field);
+            }
+          });
         });
-      }, 300); // Debounce 300ms pour éviter scan excessif
+      } else {
+        console.warn("⚠️ [MYM] Central observer not available for emoji, using fallback");
+        const processEmojiMutations = debounce(() => {
+          const inputFields = document.querySelectorAll(".input__field");
+          inputFields.forEach((field) => {
+            if (!field.querySelector(".mym-emoji-trigger")) {
+              contentAPI.emoji.addEmojiButtonToInput(field);
+            }
+          });
+        }, 300);
 
-      const emojiObserver = new MutationObserver(processEmojiMutations);
+        const emojiObserver = new MutationObserver(processEmojiMutations);
 
-      emojiObserver.observe(document.body, {
-        childList: true,
-        subtree: true,
-      });
+        emojiObserver.observe(document.body, {
+          childList: true,
+          subtree: true,
+        });
+      }
     } else {
-      // // // // console.log("⏸️ [MYM] Emoji disabled or module not loaded");
     }
 
     // Initialize notes system
     if (notesEnabled && contentAPI.notes) {
-      // // // // console.log("📝 [MYM] Initializing notes system");
       contentAPI.notes.initNotesSystem();
 
       // Ajouter le bouton notes immédiatement
@@ -581,44 +571,48 @@
         contentAPI.notes.createNotesButton();
       }, 1000);
 
-      // Observer pour réinjecter le bouton si nécessaire avec debounce
-      const processNotesMutations = debounce(() => {
-        if (isChatPage && !document.getElementById("mym-notes-button")) {
-          contentAPI.notes.createNotesButton();
-        }
-      }, 300); // Debounce 300ms pour éviter checks répétés
+      // Observer pour réinjecter le bouton si nécessaire - utiliser central observer
+      if (contentAPI.centralObserver) {
+        contentAPI.centralObserver.register("notesArea", () => {
+          if (isChatPage && !document.getElementById("mym-notes-button")) {
+            contentAPI.notes.createNotesButton();
+          }
+        });
+      } else {
+        console.warn("⚠️ [MYM] Central observer not available for notes, using fallback");
+        const processNotesMutations = debounce(() => {
+          if (isChatPage && !document.getElementById("mym-notes-button")) {
+            contentAPI.notes.createNotesButton();
+          }
+        }, 300);
 
-      const notesObserver = new MutationObserver(processNotesMutations);
+        const notesObserver = new MutationObserver(processNotesMutations);
 
-      notesObserver.observe(document.body, {
-        childList: true,
-        subtree: true,
-      });
+        notesObserver.observe(document.body, {
+          childList: true,
+          subtree: true,
+        });
+      }
     } else {
-      // // // // console.log("⏸️ [MYM] Notes disabled or module not loaded");
     }
 
     // Initialize conversations list
     if (contentAPI.conversations) {
-      // // // // console.log("💬 [MYM] Initializing conversations list");
       contentAPI.conversations.init();
     }
 
     // Initialize keyboard shortcuts (Ctrl+Enter)
     if (contentAPI.keyboard) {
-      // // // // console.log("⌨️ [MYM] Initializing keyboard shortcuts");
       contentAPI.keyboard.init();
     }
 
     // Initialize auto-polling
     if (contentAPI.polling) {
-      // // // // console.log("🔔 [MYM] Initializing auto-polling");
       contentAPI.polling.init();
     }
 
     // Initialize sidebar toggle (mobile)
     if (contentAPI.sidebarToggle) {
-      // // // // console.log("📱 [MYM] Initializing sidebar toggle");
       contentAPI.sidebarToggle.init();
     }
 
@@ -626,13 +620,11 @@
     if (statsEnabled && contentAPI.stats && isChatPage) {
       const username = contentAPI.getCurrentConversationUsername();
       if (username) {
-        // // // // console.log("📊 [MYM] Injecting stats box for:", username);
         contentAPI.stats.injectUserInfoBox(username);
       } else {
         console.warn("⚠️ [MYM] No username found for stats box");
       }
     } else {
-      // // // // console.log("⏸️ [MYM] Stats disabled, module not loaded, or not on chat page");
     }
   }
 
@@ -644,7 +636,6 @@
 
     messageListener = (message, sender, sendResponse) => {
       if (message.action === "featuresEnabled") {
-        // // // // console.log("🔓 [MYM] Features enabled by background");
         readFeatureFlags().then((flags) => {
           badgesEnabled = flags.badges;
           statsEnabled = flags.stats;
@@ -769,7 +760,12 @@
 
       if (message.action === "applyTheme" && message.theme) {
         // Appliquer le thème sur la page
-        applyThemeToPage(message.theme);
+        applyThemeToCreatorsPage(message.theme);
+      }
+
+      if (message.action === "themeChanged" && message.theme) {
+        // Appliquer le thème depuis la popup
+        applyThemeToCreatorsPage(message.theme);
       }
 
       if (message.action === "toggleFeature") {
@@ -820,7 +816,6 @@
   // FEATURE TOGGLE HANDLER
   // ========================================
   function handleFeatureToggle(feature, enabled) {
-    // // // // console.log(`🔄 [MYM] Feature toggle: ${feature} = ${enabled}`);
 
     switch (feature) {
       case "mym_badges_enabled":
@@ -932,15 +927,35 @@
         break;
 
       default:
-        // // // // console.log(`⚠️ [MYM] Unknown feature: ${feature}`);
     }
   }
 
   // ========================================
   // THEME APPLICATION
   // ========================================
-  function applyThemeToPage(theme) {
-    // Créer ou mettre à jour la balise <style> pour le thème
+  const THEMES_MAP = {
+    default: {
+      name: "Violet",
+      primary: "#667eea",
+      secondary: "#764ba2",
+      gradient: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
+    },
+    dark: {
+      name: "Sombre",
+      primary: "#181717ff",
+      secondary: "#1d1d1dff",
+      gradient: "linear-gradient(135deg, #5f5f5fff 0%, #1d1d1dff 100%)",
+      background: "#0a0b0e",
+      textColor: "#e5e7eb",
+      textSecondary: "#d7dce6ff",
+      cardBackground: "#626263ff",
+      borderColor: "#2a2d3a",
+    },
+  };
+
+  function applyThemeToCreatorsPage(themeName) {
+    const theme = THEMES_MAP[themeName] || THEMES_MAP.default;
+    
     let themeStyle = document.getElementById("mym-theme-style");
     if (!themeStyle) {
       themeStyle = document.createElement("style");
@@ -948,198 +963,114 @@
       document.head.appendChild(themeStyle);
     }
 
-    // CSS pour appliquer le thème sur les éléments de la page
     themeStyle.textContent = `
-      /* Theme override for MYM pages */
+      /* Theme from mymchat.fr profile */
       :root {
         --mym-theme-primary: ${theme.primary} !important;
         --mym-theme-secondary: ${theme.secondary} !important;
         --mym-theme-gradient: ${theme.gradient} !important;
       }
 
-      /* Appliquer aux boutons principaux */
-      button[class*="primary"],
-      .btn-primary,
-      [class*="PrimaryButton"] {
+      /* Extension buttons styling */
+      .mym-notes-button,
+      .mym-emoji-trigger,
+      button[class*="mym-"],
+      .button.button--primary {
+        background: ${theme.gradient} !important;
+        border: ${theme.gradient} 1px solid !important;
+      }
+
+      .mym-notes-button:hover,
+      .mym-emoji-trigger:hover {
+        opacity: 0.9 !important;
+        transform: scale(1.05) !important;
+      }
+
+      /* MYM Native buttons - Nouveau button */
+      .navigation__button.button-new--primary,
+      button.button-new--primary {
+        background: ${theme.gradient} !important;
+        border: none !important;
+      }
+
+      .navigation__button.button-new--primary:hover,
+      button.button-new--primary:hover {
+        opacity: 0.9 !important;
+        transform: translateY(-1px) !important;
+      }
+
+      /* Badge colors */
+      .mym-total-spent-badge,
+      .mym-category-badge {
         background: ${theme.gradient} !important;
       }
 
-      /* Appliquer aux liens actifs */
-      a.active,
-      [class*="active"] a {
-        color: ${theme.primary} !important;
-      }
-
-      /* Appliquer aux badges de revenus */
-      .revenue-badge,
-      [class*="RevenueBadge"] {
+      /* Stats box styling */
+      #mym-user-info-box {
         background: ${theme.gradient} !important;
-      }
-
-      /* Appliquer aux éléments de stats */
-      .stats-box,
-      [class*="StatsBox"] {
         border-color: ${theme.primary} !important;
       }
 
-      /* Appliquer aux highlights */
+      /* Selection highlight */
       ::selection {
         background: ${theme.primary} !important;
         color: white !important;
       }
     `;
-
-    // console.log(`🎨 [MYM] Thème "${theme.name}" appliqué`);
     
-    // Synchroniser avec le localStorage de la page pour le frontend React
-    if (window.location.hostname === 'mymchat.fr' || window.location.hostname === 'localhost') {
-      // Obtenir le nom du thème depuis chrome.storage
-      chrome.storage.local.get(["user_theme"], (data) => {
-        const themeName = data.user_theme || "default";
-        // Injecter dans le localStorage de la page
-        try {
-          const oldValue = window.localStorage.getItem("user_theme");
-          window.localStorage.setItem("user_theme", themeName);
-          
-          // Déclencher un événement personnalisé que React peut écouter
-          // (StorageEvent ne fonctionne pas dans le même onglet)
-          window.dispatchEvent(new CustomEvent('themeChange', {
-            detail: { themeName, oldValue, newValue: themeName }
-          }));
-          
-          // Forcer un refresh en modifiant directement les CSS variables
-          document.documentElement.style.setProperty("--gradient-primary", THEMES[themeName]?.gradient || THEMES.default.gradient);
-          document.documentElement.style.setProperty("--primary-color", THEMES[themeName]?.primary || THEMES.default.primary);
-          document.documentElement.style.setProperty("--secondary-color", THEMES[themeName]?.secondary || THEMES.default.secondary);
-        } catch (e) {
-          console.error("Erreur lors de la synchronisation du thème:", e);
+    // Dispatcher un event pour notifier les modules du changement de thème
+    const themeEvent = new CustomEvent('mymThemeChanged', { 
+      detail: { themeName, theme } 
+    });
+    document.dispatchEvent(themeEvent);
+  }
+
+  let currentAppliedTheme = null;
+
+  function syncThemeFromStorage() {
+    chrome.storage.local.get(["user_theme"], (data) => {
+      const themeName = data.user_theme || "default";
+      currentAppliedTheme = themeName;
+      applyThemeToCreatorsPage(themeName);
+    });
+  }
+
+  // Réappliquer le thème quand de nouveaux boutons apparaissent
+  function setupThemeObserver() {
+    const themeObserver = new MutationObserver(() => {
+      if (currentAppliedTheme) {
+        // Vérifier si le style existe toujours
+        const themeStyle = document.getElementById("mym-theme-style");
+        if (!themeStyle) {
+          console.log(`🔄 [MYM Content] Theme style removed, reapplying...`);
+          applyThemeToCreatorsPage(currentAppliedTheme);
         }
-      });
-    }
-    
-    // Mettre à jour les éléments existants avec styles inline
-    updateExistingElementsWithTheme(theme);
+      }
+    });
+
+    themeObserver.observe(document.head, {
+      childList: true,
+      subtree: false
+    });
   }
 
-  // Mettre à jour les éléments déjà créés avec le nouveau thème
-  function updateExistingElementsWithTheme(theme) {
-    const gradient = theme.gradient;
-    
-    // Mettre à jour la box de stats
-    const userInfoBox = document.getElementById("mym-user-info-box");
-    if (userInfoBox) {
-      userInfoBox.style.background = gradient;
-    }
-    
-    // Mettre à jour tous les boutons emoji
-    const emojiButtons = document.querySelectorAll(".mym-emoji-trigger, .mym-emoji-btn");
-    emojiButtons.forEach(button => {
-      button.style.background = gradient;
-    });
-    
-    // Mettre à jour le picker emoji
-    const emojiPicker = document.getElementById("mym-emoji-picker");
-    if (emojiPicker) {
-      emojiPicker.style.background = gradient;
-    }
-    
-    // Mettre à jour la section fréquents du picker
-    const frequentSection = document.getElementById("mym-frequent-emojis");
-    if (frequentSection) {
-      frequentSection.style.background = gradient;
-    }
-    
-    // Mettre à jour le panneau notes
-    const notesPanel = document.getElementById("mym-notes-panel");
-    if (notesPanel) {
-      notesPanel.style.background = gradient;
-    }
-    
-    // Mettre à jour tous les boutons notes
-    const noteButtons = document.querySelectorAll("#mym-notes-button");
-    noteButtons.forEach(button => {
-      button.style.background = gradient;
-    });
-    
-    // Mettre à jour l'éditeur de notes (modal)
-    const notesEditor = document.querySelector(".mym-notes-editor");
-    if (notesEditor) {
-      notesEditor.style.background = gradient;
-    }
-    
-    // Mettre à jour le badge de revenu total
-    const totalSpentBadge = document.querySelector(".mym-total-spent-badge");
-    if (totalSpentBadge) {
-      totalSpentBadge.style.background = gradient;
-    }
-  }
-
-  // Charger et appliquer le thème au chargement
-  chrome.storage.local.get(["user_theme"], (data) => {
-    const themeName = data.user_theme || "default";
-    const THEMES = {
-      default: {
-        name: "Violet",
-        primary: "#667eea",
-        secondary: "#764ba2",
-        gradient: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
-      },
-      blue: {
-        name: "Bleu",
-        primary: "#4facfe",
-        secondary: "#00f2fe",
-        gradient: "linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)",
-      },
-      green: {
-        name: "Vert",
-        primary: "#43e97b",
-        secondary: "#38f9d7",
-        gradient: "linear-gradient(135deg, #43e97b 0%, #38f9d7 100%)",
-      },
-      pink: {
-        name: "Rose",
-        primary: "#f857a6",
-        secondary: "#ff5858",
-        gradient: "linear-gradient(135deg, #f857a6 0%, #ff5858 100%)",
-      },
-      orange: {
-        name: "Orange",
-        primary: "#fa709a",
-        secondary: "#fee140",
-        gradient: "linear-gradient(135deg, #fa709a 0%, #fee140 100%)",
-      },
-      dark: {
-        name: "Sombre",
-        primary: "#434343",
-        secondary: "#000000",
-        gradient: "linear-gradient(135deg, #434343 0%, #000000 100%)",
-      },
-    };
-
-    const theme = THEMES[themeName] || THEMES.default;
-    applyThemeToPage(theme);
-
-    // Synchroniser immédiatement avec le localStorage du frontend
-    if (window.location.hostname === 'mymchat.fr' || window.location.hostname === 'localhost') {
-      try {
-        const oldValue = window.localStorage.getItem("user_theme");
-        window.localStorage.setItem("user_theme", themeName);
-        // console.log(`🎨 [MYM] Thème "${themeName}" synchronisé avec le frontend`);
-        
-        // Déclencher événement personnalisé pour React
-        window.dispatchEvent(new CustomEvent('themeChange', {
-          detail: { themeName, oldValue, newValue: themeName }
-        }));
-        
-        // Forcer application directe des CSS variables
-        document.documentElement.style.setProperty("--gradient-primary", theme.gradient);
-        document.documentElement.style.setProperty("--primary-color", theme.primary);
-        document.documentElement.style.setProperty("--secondary-color", theme.secondary);
-      } catch (e) {
-        console.error("Erreur lors de la synchronisation initiale du thème:", e);
+  // Écouter les changements de thème depuis chrome.storage
+  chrome.storage.onChanged.addListener((changes, areaName) => {
+    if (areaName === 'local' && changes.user_theme) {
+      const newTheme = changes.user_theme.newValue;
+      console.log(`🎨 [MYM Content] Theme changed in storage: ${changes.user_theme.oldValue} → ${newTheme}`);
+      if (newTheme) {
+        currentAppliedTheme = newTheme;
+        applyThemeToCreatorsPage(newTheme);
       }
     }
   });
+
+  // Appliquer le thème au chargement de la page
+  syncThemeFromStorage();
+  
+  // Setup observer pour surveiller la suppression du style
+  setupThemeObserver();
 
   // ========================================
   // CLEANUP
@@ -1188,54 +1119,15 @@
       messageListener = null;
     }
 
-    // // // // console.log("🧹 [MYM] Cleanup completed");
   }
 
   window.addEventListener("beforeunload", cleanupAll);
 
-  // ========================================
-  // STORAGE CHANGE LISTENER
-  // ========================================
-  chrome.storage.onChanged.addListener((changes, areaName) => {
-    if (areaName === "local") {
-      // Détecter si les features ont été désactivées par le background
-      const featureChanges = [
-        "mym_live_enabled",
-        "mym_badges_enabled", 
-        "mym_stats_enabled",
-        "mym_emoji_enabled",
-        "mym_notes_enabled"
-      ];
-
-      const anyFeatureDisabled = featureChanges.some(
-        key => {
-          const change = changes[key];
-          // Vérifier qu'il y a vraiment un changement de true vers false
-          return change && 
-                 change.oldValue === true && 
-                 change.newValue === false;
-        }
-      );
-
-      if (anyFeatureDisabled) {
-        // console.log("⚠️ [MYM] Features disabled by background");
-        // console.log("Changes detected:", changes);
-        
-        // NE PLUS recharger automatiquement la page
-        // Au lieu de cela, laisser les handlers de cleanup faire leur travail
-        // L'utilisateur peut recharger manuellement s'il le souhaite
-        
-        // Note: Le reload automatique causait des problèmes de déconnexion
-        // car il se déclenchait pendant la vérification d'abonnement au chargement
-      }
-    }
-  });
 
   // ========================================
   // INITIALIZATION
   // ========================================
   (async function init() {
-    // // // // console.log("🎬 [MYM] Initializing extension...");
 
     // 1. Vérifier d'abord si les fonctionnalités sont activées (check background.js flags)
     const mainFlags = await contentAPI.safeStorageGet("local", [
@@ -1246,7 +1138,6 @@
       "mym_notes_enabled",
     ]);
 
-    // Si TOUTES les fonctionnalités sont désactivées, ne rien charger
     const anyEnabled = Object.values(mainFlags).some((val) => val === true);
     if (!anyEnabled) {
       console.log(
@@ -1261,12 +1152,9 @@
     // 3. Check if extension is enabled
     const isEnabled = await readEnabledFlag(true);
     if (!isEnabled) {
-      // // // // console.log("⏸️ [MYM] Extension disabled by user");
       return;
     }
 
-    // 4. Verify subscription
-    // NOTE: La vérification de l'abonnement est gérée par background.js
     const token = await contentAPI.safeStorageGet("local", ["access_token"]);
     if (token.access_token && contentAPI.api) {
       try {
@@ -1284,15 +1172,21 @@
       );
     }
 
-    // 4. Initialize features
+    // 5. Start central observer BEFORE initializing features
+    if (contentAPI.centralObserver) {
+      contentAPI.centralObserver.start();
+    } else {
+      console.warn("⚠️ [MYM] Central observer module not loaded");
+    }
+
+    // 6. Initialize features
     initializeObservers();
 
-    // 5. Message polling is now handled by modules/auto-polling.js
+    // 7. Message polling is now handled by modules/auto-polling.js
 
-    // 6. Setup background communication
+    // 8. Setup background communication
     setupMessageListener();
 
-    // // // // console.log("✅ [MYM] Extension initialized successfully");
   })();
 })();
 
@@ -1311,4 +1205,3 @@ window.addEventListener(
   true
 );
 
-// // // // console.log("✅ [MYM Content] Main orchestrator loaded");

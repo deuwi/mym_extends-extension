@@ -37,6 +37,7 @@
       "js": [
         "config.js",
         "modules/core.js",
+        "modules/central-observer.js",
         "modules/api.js",
         "modules/badges.js",
         "modules/emoji.js",

@@ -1143,157 +1143,94 @@
   }
 
   // ========================================
-  // THEME MANAGEMENT
+  // THEME SELECTOR
   // ========================================
-
   const THEMES = {
     default: {
       name: "Violet",
       primary: "#667eea",
       secondary: "#764ba2",
+      background: "#f5f7ff",
       gradient: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
-    },
-    blue: {
-      name: "Bleu",
-      primary: "#4facfe",
-      secondary: "#00f2fe",
-      gradient: "linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)",
-    },
-    green: {
-      name: "Vert",
-      primary: "#43e97b",
-      secondary: "#38f9d7",
-      gradient: "linear-gradient(135deg, #43e97b 0%, #38f9d7 100%)",
-    },
-    pink: {
-      name: "Rose",
-      primary: "#f857a6",
-      secondary: "#ff5858",
-      gradient: "linear-gradient(135deg, #f857a6 0%, #ff5858 100%)",
-    },
-    orange: {
-      name: "Orange",
-      primary: "#fa709a",
-      secondary: "#fee140",
-      gradient: "linear-gradient(135deg, #fa709a 0%, #fee140 100%)",
     },
     dark: {
       name: "Sombre",
-      primary: "#8b9bff",
-      secondary: "#9b7bd5",
-      gradient: "linear-gradient(135deg, #8b9bff 0%, #9b7bd5 100%)",
-      background: "#0a0b0e",
+      primary: "#181717ff",
+      secondary: "#1d1d1dff",
+      gradient: "linear-gradient(135deg, #5f5f5fff 0%, #1d1d1dff 100%)",
     },
   };
 
-  function applyTheme(themeName) {
-    const theme = THEMES[themeName] || THEMES.default;
-    
-    // Appliquer les CSS variables
-    document.documentElement.style.setProperty("--theme-primary", theme.primary);
-    document.documentElement.style.setProperty("--theme-secondary", theme.secondary);
-    document.documentElement.style.setProperty("--theme-gradient", theme.gradient);
-
-    // Appliquer le fond de la popup si le thème a une couleur de fond spécifique
-    if (theme.background) {
-      document.body.style.background = theme.background;
-      document.body.style.color = "#e5e7eb"; // Texte clair pour dark mode
-      const popupContainer = document.querySelector(".popup-container");
-      if (popupContainer) {
-        popupContainer.style.background = theme.background;
-      }
-    } else {
-      // Réinitialiser au fond par défaut
-      document.body.style.background = "#020408";
-      document.body.style.color = "";
-      const popupContainer = document.querySelector(".popup-container");
-      if (popupContainer) {
-        popupContainer.style.background = "#020408";
-      }
-    }
-
-    // Mettre à jour tous les éléments avec gradient
-    const gradientElements = document.querySelectorAll(".popup-header h1, .toggle.on, .link-container a.pricing-link");
-    gradientElements.forEach((el) => {
-      if (el.classList.contains("toggle")) {
-        el.style.background = theme.gradient;
-      } else if (el.classList.contains("pricing-link")) {
-        el.style.background = theme.gradient;
-      } else if (el.tagName === "H1") {
-        // Pour le h1, utiliser du texte blanc avec le thème sombre
-        if (themeName === "dark") {
-          el.style.background = "none";
-          el.style.webkitTextFillColor = "#ffffff";
-          el.style.color = "#ffffff";
-        } else {
-          el.style.background = theme.gradient;
-          el.style.webkitBackgroundClip = "text";
-          el.style.backgroundClip = "text";
-          el.style.webkitTextFillColor = "transparent";
-          el.style.color = "transparent";
-        }
-      } else {
-        el.style.background = theme.gradient;
-        el.style.webkitBackgroundClip = "text";
-        el.style.backgroundClip = "text";
-      }
-    });
-
-    // Stocker le thème sélectionné
-    chrome.storage.local.set({ user_theme: themeName });
-
-    // Envoyer le thème au content script pour l'appliquer sur la page
-    chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-      if (tabs[0]) {
-        // Vérifier que l'onglet est une page web valide (pas chrome://, about:, etc.)
-        const url = tabs[0].url || "";
-        if (url.startsWith("http://") || url.startsWith("https://")) {
-          chrome.tabs.sendMessage(tabs[0].id, {
-            action: "applyTheme",
-            theme: theme,
-          }, (response) => {
-            // Ignorer l'erreur si le content script n'est pas chargé
-            if (chrome.runtime.lastError) {
-              // console.log("Content script not loaded on this page:", chrome.runtime.lastError.message);
-            }
-          });
-        }
-      }
-    });
-  }
-
   function initializeThemeSelector() {
-    const themeOptions = document.querySelectorAll(".theme-option");
-    
+    const themeGrid = document.getElementById("themeGrid");
+    if (!themeGrid) return;
+
     // Charger le thème actuel
     chrome.storage.local.get(["user_theme"], (data) => {
       const currentTheme = data.user_theme || "default";
-      
-      // Appliquer le thème
-      applyTheme(currentTheme);
 
-      // Mettre à jour l'UI
-      themeOptions.forEach((option) => {
-        option.classList.remove("active");
-        if (option.dataset.theme === currentTheme) {
-          option.classList.add("active");
-        }
+      // Créer les options de thème
+      Object.entries(THEMES).map(([key, theme]) => {
+        const button = document.createElement("button");
+        button.className = `theme-option ${currentTheme === key ? "active" : ""}`;
+        button.onclick = () => changeTheme(key);
+        button.title = theme.name;
+
+        const name = document.createElement("div");
+        name.className = "theme-name";
+        name.textContent = theme.name;
+
+        const preview = document.createElement("div");
+        preview.className = "theme-preview";
+
+        const color1 = document.createElement("div");
+        color1.className = "theme-color";
+        color1.style.background = theme.primary;
+
+        const color2 = document.createElement("div");
+        color2.className = "theme-color";
+        color2.style.background = theme.secondary;
+
+        preview.appendChild(color1);
+        preview.appendChild(color2);
+        button.appendChild(name);
+        button.appendChild(preview);
+        themeGrid.appendChild(button);
       });
     });
+  }
 
-    // Gérer les clics sur les thèmes
-    themeOptions.forEach((option) => {
-      option.addEventListener("click", () => {
-        const themeName = option.dataset.theme;
-        
-        // Retirer la classe active de tous
-        themeOptions.forEach((opt) => opt.classList.remove("active"));
-        
-        // Ajouter la classe active au sélectionné
-        option.classList.add("active");
-        
-        // Appliquer le thème
-        applyTheme(themeName);
+  function changeTheme(themeName) {
+    if (!THEMES[themeName]) return;
+
+    // Sauvegarder dans chrome.storage
+    chrome.storage.local.set({ user_theme: themeName }, () => {
+      console.log(`🎨 [Popup] Theme changed to: ${themeName}`);
+
+      // Mettre à jour l'UI
+      document.querySelectorAll(".theme-option").forEach((btn, index) => {
+        const key = Object.keys(THEMES)[index];
+        if (key === themeName) {
+          btn.classList.add("active");
+        } else {
+          btn.classList.remove("active");
+        }
+      });
+
+      // Notifier tous les onglets ouverts
+      chrome.tabs.query({}, (tabs) => {
+        tabs.forEach((tab) => {
+          chrome.tabs.sendMessage(
+            tab.id,
+            { action: "themeChanged", theme: themeName },
+            () => {
+              // Ignorer les erreurs si l'onglet n'a pas de content script
+              if (chrome.runtime.lastError) {
+                // Silently ignore
+              }
+            }
+          );
+        });
       });
     });
   }
