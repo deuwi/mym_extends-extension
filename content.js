@@ -1139,7 +1139,7 @@
     if (featureChanged) {
       // Resynchroniser l'API avec le storage
       syncFeatureFlagsToAPI().then(() => {
-        console.log('🔄 [MYM] Feature flags synchronized from storage');
+        if (APP_CONFIG.DEBUG) console.log('🔄 [MYM] Feature flags synchronized from storage');
       });
     }
   });
