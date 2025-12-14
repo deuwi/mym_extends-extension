@@ -821,7 +821,16 @@ async function checkAndEnableFeatures() {
         
         if (currentRefreshCycleAttempts > MAX_REFRESH_ATTEMPTS_PER_CYCLE) {
           console.error(`❌ [BACKGROUND] Token trop vieux et refresh impossible après ${MAX_REFRESH_ATTEMPTS_PER_CYCLE} tentatives`);
-          console.error("💡 Veuillez vous reconnecter.");
+          console.error("💡 Déconnexion de l'utilisateur - veuillez vous reconnecter.");
+          
+          // Déconnecter complètement l'utilisateur
+          await chrome.storage.local.remove([
+            "firebaseToken",
+            "access_token",
+            "access_token_stored_at",
+            "user_email",
+            "user_id"
+          ]);
           
           // Désactiver les fonctionnalités
           await chrome.storage.local.set({
@@ -830,9 +839,11 @@ async function checkAndEnableFeatures() {
             mym_stats_enabled: false,
             mym_emoji_enabled: false,
             mym_notes_enabled: false,
-            subscription_active: false
+            subscription_active: false,
+            trial_days_remaining: 0,
+            agency_license_active: false
           });
-          updateExtensionIcon("error");
+          updateExtensionIcon("disconnected");
           currentRefreshCycleAttempts = 0;
           return;
         }
@@ -875,7 +886,16 @@ async function checkAndEnableFeatures() {
         
         if (currentRefreshCycleAttempts > MAX_REFRESH_ATTEMPTS_PER_CYCLE) {
           console.error(`❌ [BACKGROUND] Max refresh attempts (${MAX_REFRESH_ATTEMPTS_PER_CYCLE}) atteints - arrêt pour éviter boucle infinie`);
-          console.error("💡 Le token ne peut pas être rafraîchi. Veuillez vous reconnecter.");
+          console.error("💡 Le token ne peut pas être rafraîchi. Déconnexion de l'utilisateur.");
+          
+          // Déconnecter complètement l'utilisateur - supprimer les tokens
+          await chrome.storage.local.remove([
+            "firebaseToken",
+            "access_token",
+            "access_token_stored_at",
+            "user_email",
+            "user_id"
+          ]);
           
           // Désactiver les fonctionnalités
           await chrome.storage.local.set({
@@ -884,11 +904,13 @@ async function checkAndEnableFeatures() {
             mym_stats_enabled: false,
             mym_emoji_enabled: false,
             mym_notes_enabled: false,
-            subscription_active: false
+            subscription_active: false,
+            trial_days_remaining: 0,
+            agency_license_active: false
           });
-          updateExtensionIcon("error");
+          updateExtensionIcon("disconnected");
           
-          // Réinitialiser le compteur pour permettre une nouvelle tentative après le cooldown
+          // Réinitialiser le compteur pour permettre une nouvelle tentative après reconnexion
           currentRefreshCycleAttempts = 0;
           return;
         }
@@ -1117,14 +1139,29 @@ chrome.alarms.onAlarm.addListener((alarm) => {
     });
   } else if (alarm.name === "recheckFeaturesAfterRefresh") {
     // Revérifier les features après tentative de refresh
-    chrome.storage.local.get(["firebaseToken"], (newData) => {
-      if (newData?.firebaseToken) {
-        console.log("✅ [BACKGROUND] Token rafraîchi - revérification des features");
-        checkAndEnableFeatures();
+    chrome.storage.local.get(["firebaseToken", "access_token"], (newData) => {
+      const token = newData?.firebaseToken || newData?.access_token;
+      
+      if (token) {
+        // Vérifier si le token est valide (non expiré)
+        if (!isTokenExpiringSoon(token, 0)) {
+          if (APP_CONFIG.DEBUG) console.log("✅ [BACKGROUND] Token valide trouvé - revérification des features");
+          checkAndEnableFeatures();
+        } else {
+          console.warn("⚠️ [BACKGROUND] Token encore expiré après tentative refresh - revérification");
+          checkAndEnableFeatures(); // Tenter quand même, le compteur de retry arrêtera si échec
+        }
       } else {
-        console.log("⚠️ [BACKGROUND] Token expiré - mode gratuit activé");
-        chrome.storage.local.set({ subscription_active: false });
-        updateExtensionIcon("error");
+        console.warn("⚠️ [BACKGROUND] Aucun token trouvé après tentative refresh");
+        chrome.storage.local.set({ 
+          subscription_active: false,
+          mym_live_enabled: false,
+          mym_badges_enabled: false,
+          mym_stats_enabled: false,
+          mym_emoji_enabled: false,
+          mym_notes_enabled: false
+        });
+        updateExtensionIcon("disconnected");
       }
     });
   } else if (alarm.name.startsWith("cleanupTab_")) {
