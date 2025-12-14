@@ -60,6 +60,7 @@
     <div id="status"></div>
     
     <div>
+      <button onclick="checkIconState()">🎨 État de l'Icône</button>
       <button onclick="checkNotes()">📝 Vérifier Notes</button>
       <button onclick="checkAll()">📦 Voir Tout le Storage</button>
       <button onclick="exportNotes()">💾 Exporter Notes</button>
@@ -80,6 +81,104 @@
 
     function log(message) {
       output.textContent = message;
+    }
+
+    async function checkIconState() {
+      try {
+        showStatus('🎨 Vérification de l\'état de l\'icône...', 'info');
+        
+        const data = await chrome.storage.local.get([
+          'firebaseToken',
+          'access_token',
+          'mym_live_enabled',
+          'mym_badges_enabled',
+          'mym_stats_enabled',
+          'mym_emoji_enabled',
+          'mym_notes_enabled',
+          'subscription_active',
+          'trial_days_remaining',
+          'agency_license_active',
+          'user_email'
+        ]);
+        
+        const hasToken = data.firebaseToken || data.access_token;
+        const anyFeatureEnabled = data.mym_live_enabled || 
+                                 data.mym_badges_enabled || 
+                                 data.mym_stats_enabled || 
+                                 data.mym_emoji_enabled || 
+                                 data.mym_notes_enabled;
+        const hasActiveAccess = data.subscription_active || 
+                               (data.trial_days_remaining && data.trial_days_remaining > 0) ||
+                               data.agency_license_active;
+        
+        let result = `🎨 DIAGNOSTIC ICÔNE EXTENSION\n\n`;
+        result += `════════════════════════════════════\n\n`;
+        
+        result += `🔑 AUTHENTIFICATION:\n`;
+        result += `   Firebase Token: ${data.firebaseToken ? '✅ Présent (' + data.firebaseToken.substring(0, 20) + '...)' : '❌ Absent'}\n`;
+        result += `   Access Token: ${data.access_token ? '✅ Présent (' + data.access_token.substring(0, 20) + '...)' : '❌ Absent'}\n`;
+        result += `   Email: ${data.user_email || '❌ Non défini'}\n`;
+        result += `   → Has Token: ${hasToken ? '✅ OUI' : '❌ NON'}\n\n`;
+        
+        result += `🎯 ACCÈS PREMIUM:\n`;
+        result += `   Subscription Active: ${data.subscription_active ? '✅ OUI' : '❌ NON'}\n`;
+        result += `   Trial Days Remaining: ${data.trial_days_remaining || 0} jours\n`;
+        result += `   Agency License: ${data.agency_license_active ? '✅ ACTIVE' : '❌ INACTIVE'}\n`;
+        result += `   → Has Active Access: ${hasActiveAccess ? '✅ OUI' : '❌ NON'}\n\n`;
+        
+        result += `⚙️ FONCTIONNALITÉS:\n`;
+        result += `   Live: ${data.mym_live_enabled ? '✅ Activée' : '❌ Désactivée'}\n`;
+        result += `   Badges: ${data.mym_badges_enabled ? '✅ Activés' : '❌ Désactivés'}\n`;
+        result += `   Stats: ${data.mym_stats_enabled ? '✅ Activées' : '❌ Désactivées'}\n`;
+        result += `   Emoji: ${data.mym_emoji_enabled ? '✅ Activés' : '❌ Désactivés'}\n`;
+        result += `   Notes: ${data.mym_notes_enabled ? '✅ Activées' : '❌ Désactivées'}\n`;
+        result += `   → Any Feature Enabled: ${anyFeatureEnabled ? '✅ OUI' : '❌ NON'}\n\n`;
+        
+        result += `🎨 ÉTAT ICÔNE ATTENDU:\n`;
+        
+        let expectedIcon = '';
+        let iconColor = '';
+        
+        if (hasToken && anyFeatureEnabled) {
+          expectedIcon = 'CONNECTED (Vert)';
+          iconColor = '🟢';
+        } else if (hasToken && !anyFeatureEnabled && hasActiveAccess) {
+          expectedIcon = 'LOADING (En attente des features)';
+          iconColor = '🟡';
+        } else if (hasToken && !anyFeatureEnabled && !hasActiveAccess) {
+          expectedIcon = 'ERROR (Rouge - Pas d\'accès premium)';
+          iconColor = '🔴';
+        } else {
+          expectedIcon = 'DISCONNECTED (Gris - Non connecté)';
+          iconColor = '⚪';
+        }
+        
+        result += `   ${iconColor} ${expectedIcon}\n\n`;
+        
+        result += `════════════════════════════════════\n\n`;
+        result += `📋 DIAGNOSTIC:\n`;
+        
+        if (!hasToken) {
+          result += `   ⚠️ Vous n'êtes pas connecté. L'icône devrait être GRISE.\n`;
+        } else if (anyFeatureEnabled) {
+          result += `   ✅ Vous êtes connecté avec des features actives. L'icône devrait être VERTE.\n`;
+        } else if (hasActiveAccess) {
+          result += `   ⚠️ Vous avez un accès valide mais aucune feature n'est activée.\n`;
+          result += `   Cela peut arriver si:\n`;
+          result += `   • L'extension vient de démarrer (features en cours de chargement)\n`;
+          result += `   • Un problème empêche l'activation des features\n`;
+          result += `   💡 Essayez de recharger l'extension ou la page MYM.\n`;
+        } else {
+          result += `   ❌ Vous êtes connecté mais sans accès premium. L'icône devrait être ROUGE.\n`;
+          result += `   💡 Activez un abonnement, utilisez votre trial, ou activez une licence agence.\n`;
+        }
+        
+        log(result);
+        showStatus(`${iconColor} Icône attendue: ${expectedIcon}`, hasToken && anyFeatureEnabled ? 'success' : hasToken ? 'error' : 'info');
+      } catch (error) {
+        log(`❌ Erreur: ${error.message}\n\n${error.stack}`);
+        showStatus('❌ Erreur lors de la vérification', 'error');
+      }
     }
 
     async function checkNotes() {
