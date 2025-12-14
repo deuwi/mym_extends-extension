@@ -50,7 +50,6 @@ if (isExtensionLogin) {
           console.error("❌ Error sending message:", err);
         }
       }
-      );
     }
   });
 

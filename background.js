@@ -817,10 +817,30 @@ async function checkAndEnableFeatures() {
     if (tokenStoredAt && safeStorageData.access_token) {
       const tokenAge = Date.now() - tokenStoredAt;
       if (tokenAge > TOKEN_MAX_AGE) {
+        currentRefreshCycleAttempts++;
+        
+        if (currentRefreshCycleAttempts > MAX_REFRESH_ATTEMPTS_PER_CYCLE) {
+          console.error(`❌ [BACKGROUND] Token trop vieux et refresh impossible après ${MAX_REFRESH_ATTEMPTS_PER_CYCLE} tentatives`);
+          console.error("💡 Veuillez vous reconnecter.");
+          
+          // Désactiver les fonctionnalités
+          await chrome.storage.local.set({
+            mym_live_enabled: false,
+            mym_badges_enabled: false,
+            mym_stats_enabled: false,
+            mym_emoji_enabled: false,
+            mym_notes_enabled: false,
+            subscription_active: false
+          });
+          updateExtensionIcon("error");
+          currentRefreshCycleAttempts = 0;
+          return;
+        }
+        
         console.warn(
           `⚠️ [BACKGROUND] Token expiré (âge: ${Math.floor(
             tokenAge / (24 * 60 * 60 * 1000)
-          )} jours) - tentative rafraîchissement`
+          )} jours) - tentative rafraîchissement (${currentRefreshCycleAttempts}/${MAX_REFRESH_ATTEMPTS_PER_CYCLE})`
         );
         
         // Tenter de rafraîchir le token avant de désactiver
@@ -851,7 +871,29 @@ async function checkAndEnableFeatures() {
     if (!res.ok) {
       // Si token expiré (401), tenter rafraîchissement automatique
       if (res.status === 401) {
-        console.warn("🔒 [BACKGROUND] Token 401 (checkAndEnableFeatures) - tentative rafraîchissement");
+        currentRefreshCycleAttempts++;
+        
+        if (currentRefreshCycleAttempts > MAX_REFRESH_ATTEMPTS_PER_CYCLE) {
+          console.error(`❌ [BACKGROUND] Max refresh attempts (${MAX_REFRESH_ATTEMPTS_PER_CYCLE}) atteints - arrêt pour éviter boucle infinie`);
+          console.error("💡 Le token ne peut pas être rafraîchi. Veuillez vous reconnecter.");
+          
+          // Désactiver les fonctionnalités
+          await chrome.storage.local.set({
+            mym_live_enabled: false,
+            mym_badges_enabled: false,
+            mym_stats_enabled: false,
+            mym_emoji_enabled: false,
+            mym_notes_enabled: false,
+            subscription_active: false
+          });
+          updateExtensionIcon("error");
+          
+          // Réinitialiser le compteur pour permettre une nouvelle tentative après le cooldown
+          currentRefreshCycleAttempts = 0;
+          return;
+        }
+        
+        console.warn(`🔒 [BACKGROUND] Token 401 (checkAndEnableFeatures) - tentative rafraîchissement (${currentRefreshCycleAttempts}/${MAX_REFRESH_ATTEMPTS_PER_CYCLE})`);
         await refreshFirebaseToken();
         
         // Créer une alarme pour revérifier après refresh
@@ -874,6 +916,9 @@ async function checkAndEnableFeatures() {
     }
 
     const data = await res.json();
+
+    // ✅ Appel API réussi - réinitialiser le compteur de tentatives
+    currentRefreshCycleAttempts = 0;
 
     // Si l'utilisateur a une licence agence active OU un abonnement actif, activer les fonctionnalités
     const hasAccess =
@@ -1129,6 +1174,10 @@ function isTokenExpiringSoon(token, minutesBeforeExpiry = 10) {
 let lastRefreshAttempt = 0;
 const REFRESH_COOLDOWN = 5 * 60 * 1000; // 5 minutes minimum entre chaque refresh
 
+// Compteur pour éviter les boucles infinies de refresh
+let currentRefreshCycleAttempts = 0;
+const MAX_REFRESH_ATTEMPTS_PER_CYCLE = 2;
+
 // 🔄 Rafraîchir le token Firebase de manière proactive
 async function refreshFirebaseToken() {
   if (APP_CONFIG.DEBUG) console.log("🔄 [BACKGROUND] refreshFirebaseToken called");
@@ -1138,6 +1187,11 @@ async function refreshFirebaseToken() {
   if (now - lastRefreshAttempt < REFRESH_COOLDOWN) {
     console.log(`ℹ️ Refresh en cooldown (${Math.round((REFRESH_COOLDOWN - (now - lastRefreshAttempt)) / 1000)}s restantes)`);
     return;
+  }
+  
+  // Nouveau cycle de refresh - réinitialiser le compteur
+  if (now - lastRefreshAttempt >= REFRESH_COOLDOWN) {
+    currentRefreshCycleAttempts = 0;
   }
   
   lastRefreshAttempt = now;
