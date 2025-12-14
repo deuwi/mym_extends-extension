@@ -1215,7 +1215,7 @@ const REFRESH_COOLDOWN = 5 * 60 * 1000; // 5 minutes minimum entre chaque refres
 let currentRefreshCycleAttempts = 0;
 const MAX_REFRESH_ATTEMPTS_PER_CYCLE = 2;
 
-// 🔄 Rafraîchir le token Firebase de manière proactive
+// 🔄 Rafraîchir le token Firebase de manière proactive via l'API backend
 async function refreshFirebaseToken() {
   if (APP_CONFIG.DEBUG) console.log("🔄 [BACKGROUND] refreshFirebaseToken called");
   
@@ -1255,8 +1255,75 @@ async function refreshFirebaseToken() {
       return;
     }
 
-    if (APP_CONFIG.DEBUG) console.log("🔄 Rafraîchissement proactif du token Firebase (expire dans moins de 15 minutes)...");
+    if (APP_CONFIG.DEBUG) console.log("🔄 Rafraîchissement du token Firebase via API backend...");
 
+    // Appeler l'API backend pour rafraîchir le token
+    const response = await fetch(`${API_BASE}/refresh-token`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ token }),
+    });
+
+    if (!response.ok) {
+      console.warn(`⚠️ Échec du refresh token (HTTP ${response.status})`);
+      return;
+    }
+
+    const refreshData = await response.json();
+    
+    if (!refreshData.custom_token || !refreshData.api_key) {
+      console.error("❌ Réponse invalide du serveur (custom_token ou api_key manquant)");
+      return;
+    }
+
+    // Échanger le custom token contre un ID token via l'API Firebase
+    const exchangeResponse = await fetch(
+      `https://identitytoolkit.googleapis.com/v1/accounts:signInWithCustomToken?key=${refreshData.api_key}`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          token: refreshData.custom_token,
+          returnSecureToken: true,
+        }),
+      }
+    );
+
+    if (!exchangeResponse.ok) {
+      console.error("❌ Échec de l'échange du custom token");
+      return;
+    }
+
+    const exchangeData = await exchangeResponse.json();
+    
+    if (!exchangeData.idToken) {
+      console.error("❌ Pas de idToken dans la réponse d'échange");
+      return;
+    }
+
+    // Stocker le nouveau token
+    await chrome.storage.local.set({
+      firebaseToken: exchangeData.idToken,
+      access_token_stored_at: Date.now(),
+    });
+
+    if (APP_CONFIG.DEBUG) console.log("✅ Token Firebase rafraîchi avec succès via API backend");
+    
+    // Revérifier les features après le refresh
+    await checkAndEnableFeatures();
+
+  } catch (error) {
+    console.error("❌ Erreur lors du rafraîchissement du token:", error);
+  }
+}
+
+// 🗑️ Ancienne méthode avec content script (conservée en fallback mais non utilisée)
+async function refreshFirebaseTokenViaContentScript() {
+  try {
     // Envoyer un message aux content scripts pour déclencher le rafraîchissement
     chrome.tabs.query({ url: "https://creators.mym.fans/*" }, (tabs) => {
       if (chrome.runtime.lastError) {
