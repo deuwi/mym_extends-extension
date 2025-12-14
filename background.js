@@ -515,7 +515,7 @@ async function checkSubscriptionStatus(force = false) {
 
       // Si pas de token ni email, ne rien faire (utilisateur pas connecté)
       if (!token && !email) {
-        if (APP_CONFIG.DEBUG) console.log("ℹ️  Pas de token - utilisateur non connecté");
+        if (APP_CONFIG.DEBUG) console.log("ℹ️ Pas de token - utilisateur non connecté");
         return;
       }
 
@@ -799,7 +799,7 @@ async function checkAndEnableFeatures() {
     // Aucune fonctionnalité disponible sans connexion
     // Toutes les fonctionnalités nécessitent un abonnement actif
     if (!token && !email) {
-      console.log("ℹ️ Pas de token - désactivation de toutes les fonctionnalités");
+      if (APP_CONFIG.DEBUG) console.log("ℹ️ Pas de token - désactivation de toutes les fonctionnalités");
       // Aucune fonctionnalité disponible en mode gratuit
       await chrome.storage.local.set({
         mym_live_enabled: false,
@@ -1222,7 +1222,10 @@ async function refreshFirebaseToken() {
   // Vérifier le cooldown
   const now = Date.now();
   if (now - lastRefreshAttempt < REFRESH_COOLDOWN) {
-    console.log(`ℹ️ Refresh en cooldown (${Math.round((REFRESH_COOLDOWN - (now - lastRefreshAttempt)) / 1000)}s restantes)`);
+    const remainingSeconds = Math.round((REFRESH_COOLDOWN - (now - lastRefreshAttempt)) / 1000);
+    if (APP_CONFIG.DEBUG || remainingSeconds > 10) {
+      console.log(`ℹ️ Refresh en cooldown (${remainingSeconds}s restantes)`);
+    }
     return;
   }
   
@@ -1242,7 +1245,7 @@ async function refreshFirebaseToken() {
     const token = safeData.firebaseToken || safeData.access_token;
     
     if (!token || !safeData.user_email) {
-      console.log("ℹ️ Pas de token Firebase à rafraîchir (pas connecté)");
+      if (APP_CONFIG.DEBUG) console.log("ℹ️ Pas de token Firebase à rafraîchir (pas connecté)");
       return;
     }
 
