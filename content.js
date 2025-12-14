@@ -1225,7 +1225,7 @@
       // Demander au background de rafraîchir le token si nécessaire
       safeSendMessage({ type: "REFRESH_TOKEN_IF_NEEDED" }, (response) => {
         if (response && response.refreshed) {
-          console.log("✅ Token rafraîchi après retour sur la page");
+          if (APP_CONFIG.DEBUG) console.log("✅ Token rafraîchi après retour sur la page");
         }
       });
     }

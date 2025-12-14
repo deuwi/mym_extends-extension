@@ -314,7 +314,7 @@
     const userInfoBox = document.getElementById("mym-user-info-box");
     if (userInfoBox && event.detail) {
       const gradient = event.detail.theme.gradient;
-      console.log(`🎨 [MYM Stats] Updating box theme to: ${event.detail.themeName}`);
+      if (APP_CONFIG.DEBUG) console.log(`🎨 [MYM Stats] Updating box theme to: ${event.detail.themeName}`);
       userInfoBox.style.background = gradient;
     }
   });

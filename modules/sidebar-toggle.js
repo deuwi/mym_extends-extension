@@ -43,7 +43,7 @@
       margin-right: 8px;
       display: inline-flex;
       font-size: 20px;
-      background: linear-gradient(135deg, rgb(95, 95, 95) 0%, rgb(29, 29, 29) 100%); 
+      background: ${getComputedStyle(document.documentElement).getPropertyValue('--mym-theme-gradient').trim() || `linear-gradient(135deg, ${window.APP_CONFIG.PRIMARY_GRADIENT_START} 0%, ${window.APP_CONFIG.PRIMARY_GRADIENT_END} 100%)`};
       border-radius: 50%; width: 28px; 
       border: none;
       height: 28px; 
@@ -88,7 +88,7 @@
         checkButtonVisibility();
       }, 100);
     } else {
-      console.warn("⚠️ list__row__left not found, will retry...");
+      if (APP_CONFIG.DEBUG) console.warn("⚠️ list__row__left not found, will retry...");
     }
   }
 

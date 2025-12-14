@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "MYM Chat Live",
-  "version": "2.0.6",
+  "version": "2.0.7",
   "description": "Extension pour créateurs MYM.fans - Chat Live amélioré, Badges revenus, Emoji Picker, Notes. Essai gratuit 7 jours.",
   "permissions": ["storage", "alarms"],
   "host_permissions": [
