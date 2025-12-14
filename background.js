@@ -76,6 +76,67 @@ if (APP_CONFIG.DEBUG) console.log(`🔧 [BACKGROUND] Loaded with API_BASE: ${API
 if (APP_CONFIG.DEBUG) console.log("✅ [BACKGROUND] Initialization complete");
 
 // 🎨 Fonction pour mettre à jour l'icône de l'extension selon le statut
+// Mettre à jour l'icône basée sur l'état RÉEL des fonctionnalités
+async function updateExtensionIconBasedOnFeatures() {
+  try {
+    const data = await chrome.storage.local.get([
+      'firebaseToken',
+      'access_token',
+      'mym_live_enabled',
+      'mym_badges_enabled',
+      'mym_stats_enabled',
+      'mym_emoji_enabled',
+      'mym_notes_enabled',
+      'subscription_active',
+      'trial_days_remaining',
+      'agency_license_active'
+    ]);
+    
+    const hasToken = data.firebaseToken || data.access_token;
+    const anyFeatureEnabled = data.mym_live_enabled || 
+                             data.mym_badges_enabled || 
+                             data.mym_stats_enabled || 
+                             data.mym_emoji_enabled || 
+                             data.mym_notes_enabled;
+    
+    // Vérifier si l'utilisateur a un accès valide (abonnement, trial ou licence agence)
+    const hasActiveAccess = data.subscription_active || 
+                           (data.trial_days_remaining && data.trial_days_remaining > 0) ||
+                           data.agency_license_active;
+    
+    if (APP_CONFIG.DEBUG) {
+      console.log("🎨 [BACKGROUND] Icon update check:", {
+        hasToken,
+        anyFeatureEnabled,
+        hasActiveAccess,
+        features: {
+          live: data.mym_live_enabled,
+          badges: data.mym_badges_enabled,
+          stats: data.mym_stats_enabled,
+          emoji: data.mym_emoji_enabled,
+          notes: data.mym_notes_enabled
+        }
+      });
+    }
+    
+    if (hasToken && anyFeatureEnabled) {
+      updateExtensionIcon("connected");
+    } else if (hasToken && !anyFeatureEnabled && hasActiveAccess) {
+      // L'utilisateur a un accès mais les features ne sont pas encore chargées
+      // On attend un peu avant de mettre l'icône en erreur
+      if (APP_CONFIG.DEBUG) console.log("⚠️ [BACKGROUND] Token + access but no features enabled yet, keeping current icon");
+      // Ne rien faire, garder l'icône actuelle
+    } else if (hasToken && !anyFeatureEnabled && !hasActiveAccess) {
+      // Pas d'accès premium
+      updateExtensionIcon("error");
+    } else if (!hasToken) {
+      updateExtensionIcon("disconnected");
+    }
+  } catch (err) {
+    console.error("❌ [BACKGROUND] Error updating icon based on features:", err);
+  }
+}
+
 function updateExtensionIcon(status) {
   const iconSets = {
     connected: {
@@ -130,6 +191,9 @@ function updateExtensionIcon(status) {
   }
 }
 
+// Variable pour éviter les mises à jour d'icône trop rapides au démarrage
+let startupIconUpdateTimeout = null;
+
 // 🔄 Vérifier le statut de connexion au démarrage
 function checkConnectionStatus() {
   chrome.storage.local.get(
@@ -137,7 +201,14 @@ function checkConnectionStatus() {
     (data) => {
       const safeData = data || {};
       if (safeData.firebaseToken || safeData.access_token) {
+        // Au démarrage, on met l'icône en "connected" optimiste
         updateExtensionIcon("connected");
+        
+        // Vérifier l'état réel après 2 secondes
+        if (startupIconUpdateTimeout) clearTimeout(startupIconUpdateTimeout);
+        startupIconUpdateTimeout = setTimeout(() => {
+          updateExtensionIconBasedOnFeatures();
+        }, 2000);
       } else {
         updateExtensionIcon("disconnected");
       }
@@ -182,6 +253,19 @@ function checkConnectionStatus() {
 
 // 🌉 Écouter les messages du auth-bridge (connexion Google depuis le site web)
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  // 🔄 REFRESH TOKEN SI NÉCESSAIRE (depuis content.js quand page redevient visible)
+  if (message.type === "REFRESH_TOKEN_IF_NEEDED") {
+    refreshFirebaseToken()
+      .then(() => {
+        sendResponse({ success: true, refreshed: true });
+      })
+      .catch((error) => {
+        console.error("❌ Error refreshing token:", error);
+        sendResponse({ success: false, error: error.message });
+      });
+    return true; // Indique qu'on va répondre de manière asynchrone
+  }
+
   // 🔓 Message pour vérifier la licence agence
   if (message.action === "checkLicense") {
     if (APP_CONFIG.DEBUG) console.log("📨 Message reçu: vérification de la licence demandée");
@@ -669,9 +753,9 @@ function disableAllFeatures(iconState = "disconnected", bypassManualCheck = fals
           mym_emoji_enabled: false,
           mym_notes_enabled: false,
         },
-        () => {
+        async () => {
           if (APP_CONFIG.DEBUG) console.log("🚫 Toutes les fonctionnalités désactivées");
-          updateExtensionIcon(iconState);
+          await updateExtensionIconBasedOnFeatures();
           
           // Réinitialiser le flag après un court délai
           setTimeout(() => {
@@ -830,7 +914,7 @@ async function checkAndEnableFeatures() {
       if (needsUpdate) {
         await chrome.storage.local.set(allEnabled);
       }
-      updateExtensionIcon("connected");
+      await updateExtensionIconBasedOnFeatures();
       if (APP_CONFIG.DEBUG) console.log("✅ [BACKGROUND] User has access, features enabled");
     } else {
       // Abonnement expiré - désactiver toutes les fonctionnalités
@@ -846,7 +930,7 @@ async function checkAndEnableFeatures() {
         trial_days_remaining: 0,
         agency_license_active: false,
       });
-      updateExtensionIcon("error");
+      await updateExtensionIconBasedOnFeatures();
     }
   } catch (err) {
     // En cas d'erreur réseau/serveur, GARDER les features actives
@@ -876,11 +960,26 @@ async function checkAndEnableFeatures() {
 
 // Lancer les vérifications au démarrage de l'extension
 startSubscriptionCheck();
-checkAndEnableFeatures();
+// ℹ️ checkAndEnableFeatures() sera appelé par le storage listener si des credentials existent
 
-// 🎨 Surveiller les changements d'état des fonctionnalités pour mettre à jour l'icône
+// 🎨 Listener unifié : surveille tokens ET features pour mettre à jour l'icône et l'état
 chrome.storage.onChanged.addListener((changes, areaName) => {
   if (areaName === "local") {
+    // Vérifier si les tokens Firebase ou access_token ont changé
+    if (changes.firebaseToken || changes.access_token) {
+      const hasFirebaseToken = changes.firebaseToken?.newValue;
+      const hasAccessToken = changes.access_token?.newValue;
+
+      if (hasFirebaseToken || hasAccessToken) {
+        // Token ajouté = connexion → vérifier abonnement
+        if (APP_CONFIG.DEBUG) console.log("🔄 Token détecté, vérification de l'abonnement...");
+        checkAndEnableFeatures();
+      } else {
+        // Token supprimé = déconnexion
+        updateExtensionIcon("disconnected");
+      }
+    }
+    
     // Détecter si des fonctionnalités ont changé
     const featureKeys = [
       "mym_live_enabled",
@@ -893,29 +992,9 @@ chrome.storage.onChanged.addListener((changes, areaName) => {
     const featureChanged = featureKeys.some(key => changes[key]);
 
     if (featureChanged) {
-      // Vérifier l'état actuel de toutes les features
-      chrome.storage.local.get(featureKeys, (data) => {
-        // S'assurer que data est un objet valide
-        const safeData = data || {};
-        const anyEnabled = Object.values(safeData).some(val => val === true);
-        
-        if (anyEnabled) {
-          // Au moins une fonctionnalité active → icône verte
-          updateExtensionIcon("connected");
-        } else {
-          // Aucune fonctionnalité active → vérifier si token existe
-          chrome.storage.local.get(["firebaseToken", "access_token"], (tokens) => {
-            const safeTokens = tokens || {};
-            if (safeTokens.firebaseToken || safeTokens.access_token) {
-              // Token existe mais features désactivées → icône rouge (abonnement expiré)
-              updateExtensionIcon("error");
-            } else {
-              // Pas de token → icône grise (déconnecté)
-              updateExtensionIcon("disconnected");
-            }
-          });
-        }
-      });
+      // Mettre à jour l'icône selon l'état réel des features
+      if (APP_CONFIG.DEBUG) console.log("🔄 Feature state changed, updating icon...");
+      updateExtensionIconBasedOnFeatures();
     }
   }
 });
@@ -926,11 +1005,15 @@ self.addEventListener("activate", () => {
   checkAndEnableFeatures();
 });
 
-// Vérifier immédiatement si déjà des credentials en storage
-chrome.storage.local.get(["firebaseToken", "user_email"], (data) => {
+// ℹ️ Vérification initiale au startup (une seule fois)
+// Si credentials existent, checkAndEnableFeatures() sera automatiquement appelé
+chrome.storage.local.get(["firebaseToken", "access_token"], (data) => {
   const safeData = data || {};
-  if (safeData.firebaseToken || safeData.user_email) {
+  if (safeData.firebaseToken || safeData.access_token) {
+    if (APP_CONFIG.DEBUG) console.log("🔄 Credentials found at startup, checking features...");
     checkAndEnableFeatures();
+  } else {
+    if (APP_CONFIG.DEBUG) console.log("ℹ️ No credentials at startup");
   }
 });
 
@@ -1072,13 +1155,13 @@ async function refreshFirebaseToken() {
       return;
     }
 
-    // Vérifier si le token expire bientôt
-    if (!isTokenExpiringSoon(token, 10)) {
-      if (APP_CONFIG.DEBUG) console.log("✅ Token encore valide, pas besoin de rafraîchir maintenant");
+    // Vérifier si le token expire bientôt (15 minutes avant expiration)
+    if (!isTokenExpiringSoon(token, 15)) {
+      if (APP_CONFIG.DEBUG) console.log("✅ Token encore valide pour plus de 15 minutes, pas besoin de rafraîchir maintenant");
       return;
     }
 
-    if (APP_CONFIG.DEBUG) console.log("🔄 Rafraîchissement automatique du token Firebase...");
+    if (APP_CONFIG.DEBUG) console.log("🔄 Rafraîchissement proactif du token Firebase (expire dans moins de 15 minutes)...");
 
     // Envoyer un message aux content scripts pour déclencher le rafraîchissement
     chrome.tabs.query({ url: "https://creators.mym.fans/*" }, (tabs) => {
@@ -1153,23 +1236,5 @@ async function refreshFirebaseToken() {
   }
 }
 
-// 🎨 Écouter les changements de stockage pour mettre à jour l'icône en temps réel
-chrome.storage.onChanged.addListener((changes, areaName) => {
-  if (areaName === "local") {
-    // Vérifier si les tokens Firebase ou access_token ont changé
-    if (changes.firebaseToken || changes.access_token) {
-      const hasFirebaseToken = changes.firebaseToken?.newValue;
-      const hasAccessToken = changes.access_token?.newValue;
-
-      if (hasFirebaseToken || hasAccessToken) {
-        // Ne pas mettre l'icône à "connected" directement
-        // Vérifier d'abord l'abonnement
-        if (APP_CONFIG.DEBUG) console.log("🔄 Token détecté, vérification de l'abonnement...");
-        checkAndEnableFeatures();
-      } else {
-        // Token supprimé = déconnexion
-        updateExtensionIcon("disconnected");
-      }
-    }
-  }
-});
+// ✅ Storage listener unifié déjà défini plus haut (ligne ~927)
+// Ce listener gère à la fois les changements de tokens ET de features

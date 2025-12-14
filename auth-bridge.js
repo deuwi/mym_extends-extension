@@ -19,24 +19,37 @@ if (isExtensionLogin) {
       console.log("✅ Auth Bridge: Firebase token received from page!");
 
       // Envoyer le token + email + user_id + emailVerified à l'extension
-      chrome.runtime.sendMessage(
-        {
-          type: "FIREBASE_TOKEN",
-          token: event.data.token,
-          user_email: event.data.user_email || "",
-          user_id: event.data.user_id || "",
-          emailVerified: event.data.emailVerified !== false, // Par défaut true si non fourni
-        },
-        (response) => {
-          if (chrome.runtime.lastError) {
-            console.error(
-              "❌ Auth Bridge: Error sending message:",
-              chrome.runtime.lastError
-            );
-          } else {
+      try {
+        chrome.runtime.sendMessage(
+          {
+            type: "FIREBASE_TOKEN",
+            token: event.data.token,
+            user_email: event.data.user_email || "",
+            user_id: event.data.user_id || "",
+            emailVerified: event.data.emailVerified !== false, // Par défaut true si non fourni
+          },
+          (response) => {
+            if (chrome.runtime.lastError) {
+              const error = chrome.runtime.lastError.message;
+              if (error.includes("Extension context invalidated")) {
+                console.warn("⚠️ Extension rechargée, veuillez vous reconnecter");
+                window.location.href = "https://mymchat.fr/signin?redirect=extension";
+                return;
+              }
+              console.error("❌ Error sending token:", error);
+              return;
+            }
             console.log("✅ Auth Bridge: Token sent to extension:", response);
           }
+        );
+      } catch (err) {
+        if (err.message && err.message.includes("Extension context invalidated")) {
+          console.warn("⚠️ Extension rechargée, veuillez vous reconnecter");
+          window.location.href = "https://mymchat.fr/signin?redirect=extension";
+        } else {
+          console.error("❌ Error sending message:", err);
         }
+      }
       );
     }
   });
@@ -89,32 +102,44 @@ if (isExtensionLogin) {
       }
 
       // Envoyer le token à l'extension via chrome.runtime
-      chrome.runtime.sendMessage(
-        {
-          type: "GOOGLE_AUTH_SUCCESS",
-          data: {
-            access_token: freshToken,
-            user_email: email,
-            user_id: userId,
-            access_token_stored_at: Date.now(),
+      try {
+        chrome.runtime.sendMessage(
+          {
+            type: "GOOGLE_AUTH_SUCCESS",
+            data: {
+              access_token: freshToken,
+              user_email: email,
+              user_id: userId,
+              access_token_stored_at: Date.now(),
+            },
           },
-        },
-        (response) => {
-          if (chrome.runtime.lastError) {
-            console.error(
-              "❌ Auth Bridge: Error sending message:",
-              chrome.runtime.lastError
-            );
-          } else {
-            console.log("✅ Auth Bridge: Token sent to extension:", response);
+          (response) => {
+            if (chrome.runtime.lastError) {
+              const error = chrome.runtime.lastError.message;
+              if (error.includes("Extension context invalidated")) {
+                console.warn("⚠️ Extension rechargée, veuillez vous reconnecter");
+                window.location.href = "https://mymchat.fr/signin?redirect=extension";
+                return;
+              }
+              console.error("❌ Auth Bridge: Error sending message:", error);
+            } else {
+              console.log("✅ Auth Bridge: Token sent to extension:", response);
 
-            // Rediriger vers une page de succès ou fermer l'onglet
-            setTimeout(() => {
-              window.close(); // Tenter de fermer l'onglet
-            }, 1000);
+              // Rediriger vers une page de succès ou fermer l'onglet
+              setTimeout(() => {
+                window.close(); // Tenter de fermer l'onglet
+              }, 1000);
+            }
           }
+        );
+      } catch (err) {
+        if (err.message && err.message.includes("Extension context invalidated")) {
+          console.warn("⚠️ Extension rechargée, veuillez vous reconnecter");
+          window.location.href = "https://mymchat.fr/signin?redirect=extension";
+        } else {
+          console.error("❌ Error sending message:", err);
         }
-      );
+      }
 
       // Arrêter la surveillance
       clearInterval(checkInterval);

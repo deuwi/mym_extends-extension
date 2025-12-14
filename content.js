@@ -282,7 +282,24 @@
         
         if (!res.ok) {
           if (res.status === 401) {
-            // Token expiré - Vérifier l'abonnement par email avant de désactiver
+            // Token expiré - Demander au background de rafraîchir le token
+            console.log("🔄 [MYM] Token expiré, tentative de refresh...");
+            
+            try {
+              const refreshResponse = await new Promise((resolve) => {
+                safeSendMessage({ type: "REFRESH_TOKEN_IF_NEEDED" }, resolve);
+              });
+              
+              if (refreshResponse && refreshResponse.success) {
+                console.log("✅ [MYM] Token rafraîchi avec succès, retry dans 2s");
+                setTimeout(checkSubscription, 2000);
+                return;
+              }
+            } catch (refreshErr) {
+              console.warn("⚠️ [MYM] Impossible de rafraîchir le token:", refreshErr);
+            }
+            
+            // Si le refresh a échoué, vérifier par email avant de désactiver
             const userEmail = data.user_email;
             
             if (userEmail) {
@@ -301,11 +318,13 @@
                 }
               } catch (emailCheckErr) {
                 console.warn("⚠️ [MYM] Erreur vérification par email:", emailCheckErr);
+                // Ne pas désactiver sur erreur réseau
+                return;
               }
             }
             
-            // Si impossible de vérifier, désactiver
-            console.warn("🔒 [MYM] Token expiré et abonnement non vérifiable - désactivation");
+            // Seulement désactiver si on a vraiment confirmé que l'abonnement est expiré
+            console.warn("🔒 [MYM] Abonnement confirmé expiré - désactivation");
             await chrome.storage.local.set({
               mym_live_enabled: false,
               mym_badges_enabled: false,
@@ -313,7 +332,8 @@
               mym_emoji_enabled: false,
               mym_notes_enabled: false,
             });
-            window.location.reload();
+            showSubscriptionExpiredBanner();
+            setTimeout(() => window.location.reload(), 2000);
           }
           return;
         }
@@ -344,18 +364,22 @@
           setTimeout(() => window.location.reload(), 2000);
         }
       } catch (err) {
-        // Don't log error if extension context is invalidated
+        // Erreur réseau ou autre - NE PAS désactiver les fonctionnalités
+        // C'est probablement temporaire (connexion internet, serveur occupé, etc.)
         if (err.message !== "Extension context invalidated") {
           console.error("❌ [MYM] Subscription check error:", err);
+          console.log("ℹ️ [MYM] Keeping features enabled despite error (likely temporary network issue)");
         }
+        // Les fonctionnalités restent actives jusqu'à confirmation que l'abonnement est vraiment expiré
       }
     };
     
     // Vérification immédiate au démarrage
     checkSubscription();
     
-    // Puis vérification périodique
-    subscriptionMonitoringInterval = setInterval(checkSubscription, SUBSCRIPTION_CHECK_INTERVAL);
+    // Puis vérification périodique (5 minutes)
+    const checkInterval = (APP_CONFIG && APP_CONFIG.SUBSCRIPTION_CHECK_INTERVAL) || (5 * 60 * 1000);
+    subscriptionMonitoringInterval = setInterval(checkSubscription, checkInterval);
   }
 
   function stopSubscriptionMonitoring() {
@@ -1179,6 +1203,59 @@
 
   })();
 })();
+
+// ========================================
+// REFRESH TOKEN ON PAGE VISIBILITY
+// ========================================
+(function setupVisibilityRefresh() {
+  let lastVisibilityChange = 0;
+  const VISIBILITY_REFRESH_COOLDOWN = 5 * 60 * 1000; // 5 minutes
+  
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') {
+      const now = Date.now();
+      
+      // Vérifier le cooldown pour éviter les refresh trop fréquents
+      if (now - lastVisibilityChange < VISIBILITY_REFRESH_COOLDOWN) {
+        return;
+      }
+      
+      lastVisibilityChange = now;
+      
+      // Demander au background de rafraîchir le token si nécessaire
+      safeSendMessage({ type: "REFRESH_TOKEN_IF_NEEDED" }, (response) => {
+        if (response && response.refreshed) {
+          console.log("✅ Token rafraîchi après retour sur la page");
+        }
+      });
+    }
+  });
+})();
+
+// ========================================
+// HELPER: Safe runtime message with context invalidation handling
+// ========================================
+function safeSendMessage(message, callback) {
+  try {
+    chrome.runtime.sendMessage(message, (response) => {
+      if (chrome.runtime.lastError) {
+        const error = chrome.runtime.lastError.message;
+        if (error.includes("Extension context invalidated")) {
+          console.warn("⚠️ [MYM] Extension rechargée, veuillez rafraîchir la page");
+          return;
+        }
+        console.warn("⚠️ [MYM] Runtime message error:", error);
+      }
+      if (callback) callback(response);
+    });
+  } catch (err) {
+    if (err.message && err.message.includes("Extension context invalidated")) {
+      console.warn("⚠️ [MYM] Extension rechargée, veuillez rafraîchir la page");
+    } else {
+      console.error("❌ [MYM] Error sending message:", err);
+    }
+  }
+}
 
 // ========================================
 // GLOBAL ERROR HANDLER

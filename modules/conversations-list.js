@@ -424,18 +424,24 @@
   // INJECT CONVERSATIONS IN ASIDE
   // ========================================
   async function injectConversationsInAside() {
+    console.log("🔄 [MYM Conversations] injectConversationsInAside called");
+    console.log("📍 [MYM Conversations] Current URL:", window.location.pathname);
+    
     // Vérifier qu'on est sur une page de chat
     if (!window.location.pathname.startsWith("/app/chat/")) {
+      console.log("❌ [MYM Conversations] Not on chat page, aborting injection");
       return;
     }
 
     // Empêcher les injections multiples simultanées
     const now = Date.now();
     if (isInjecting || (now - lastInjectionTime < INJECTION_COOLDOWN)) {
+      console.log("⏳ [MYM Conversations] Injection in progress or cooldown active");
       return;
     }
 
     isInjecting = true;
+    console.log("✅ [MYM Conversations] Starting injection...");
 
     try {
       // Trouver l'aside
@@ -444,14 +450,17 @@
         console.warn("⚠️ [MYM Conversations] Aside not found");
         return;
       }
+      console.log("✅ [MYM Conversations] Aside found");
 
       // Supprimer le footer pour gagner de la place
       removeSidebarFooter();
 
       // Vérifier si déjà injecté
       if (aside.querySelector(".mym-conversations-list")) {
+        console.log("ℹ️ [MYM Conversations] List already injected");
         return;
       }
+      console.log("✅ [MYM Conversations] No existing list, proceeding...");
 
     // Créer le conteneur principal avec loader
     const container = document.createElement("div");
@@ -639,7 +648,8 @@
   // INITIALIZATION
   // ========================================
   function init() {
-    if (APP_CONFIG.DEBUG) console.log("🚀 [MYM Conversations] Module initializing...");
+    console.log("🚀 [MYM Conversations] Module initializing...");
+    console.log("📍 [MYM Conversations] Current URL:", window.location.pathname);
 
     // Retirer le footer immédiatement (sur toutes les pages)
     setTimeout(removeSidebarFooter, 500);
@@ -647,7 +657,7 @@
     // Observer pour retirer le footer s'il réapparaît - utiliser central observer
     if (contentAPI.centralObserver) {
       contentAPI.centralObserver.register("navigationArea", removeSidebarFooter);
-      if (APP_CONFIG.DEBUG) console.log("✅ [MYM Conversations] Footer removal registered with central observer");
+      console.log("✅ [MYM Conversations] Footer removal registered with central observer");
     } else {
       // Fallback si central observer pas disponible
       console.warn("⚠️ [MYM Conversations] Central observer not available for footer removal, using fallback");
@@ -663,7 +673,12 @@
     }
 
     // Injecter la liste si on est sur une page de chat
-    setTimeout(injectConversationsInAside, 2000);
+    if (window.location.pathname.startsWith("/app/chat/")) {
+      console.log("✅ [MYM Conversations] On chat page, injecting list in 2s...");
+      setTimeout(injectConversationsInAside, 2000);
+    } else {
+      console.log("ℹ️ [MYM Conversations] Not on chat page, skipping injection");
+    }
 
     // Observer la navigation
     observeNavigation();

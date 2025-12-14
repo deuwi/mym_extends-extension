@@ -1077,9 +1077,17 @@
           await checkSubscription();
 
           // Demander au background script de vérifier immédiatement la licence
-          chrome.runtime.sendMessage({ action: "checkLicense" }, (response) => {
-            
-          });
+          try {
+            chrome.runtime.sendMessage({ action: "checkLicense" }, (response) => {
+              if (chrome.runtime.lastError) {
+                if (!chrome.runtime.lastError.message.includes("Extension context invalidated")) {
+                  console.warn("⚠️ Error checking license:", chrome.runtime.lastError.message);
+                }
+              }
+            });
+          } catch (err) {
+            // Extension context invalidated - ignore silently
+          }
         }, 1000);
       } catch (err) {
         licenseActivateStatus.textContent = `❌ ${err.message}`;
@@ -1124,16 +1132,30 @@
     showLicenseSection(licenseData);
 
     // Demander au background script de vérifier immédiatement la licence
-    chrome.runtime.sendMessage({ action: "checkLicense" }, (response) => {
-      
-    });
+    try {
+      chrome.runtime.sendMessage({ action: "checkLicense" }, (response) => {
+        if (chrome.runtime.lastError && !chrome.runtime.lastError.message.includes("Extension context invalidated")) {
+          console.warn("⚠️ Error checking license:", chrome.runtime.lastError.message);
+        }
+      });
+    } catch (err) {
+      // Extension context invalidated - ignore silently
+    }
   };
 
   // Au chargement du popup, forcer la vérification de la licence
   setTimeout(() => {
-    chrome.runtime.sendMessage({ action: "checkLicense" }, (response) => {
-      if (APP_CONFIG.DEBUG) console.log("🔓 Vérification de la licence au chargement du popup");
-    });
+    try {
+      chrome.runtime.sendMessage({ action: "checkLicense" }, (response) => {
+        if (chrome.runtime.lastError && !chrome.runtime.lastError.message.includes("Extension context invalidated")) {
+          console.warn("⚠️ Error checking license:", chrome.runtime.lastError.message);
+        } else if (APP_CONFIG.DEBUG) {
+          console.log("🔓 Vérification de la licence au chargement du popup");
+        }
+      });
+    } catch (err) {
+      // Extension context invalidated - ignore silently
+    }
   }, 500);
 
   // Initialiser le lien de tarification avec l'URL du config
