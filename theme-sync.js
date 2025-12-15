@@ -148,23 +148,6 @@
     });
   }
 
-  /**
-   * Écoute les changements dans localStorage (depuis le sélecteur React - optionnel)
-   */
-  const originalSetItem = localStorage.setItem;
-  localStorage.setItem = function (key, value) {
-    originalSetItem.apply(this, arguments);
-    
-    if (key === "user_theme" && !isUpdatingTheme) {
-      syncAndApplyTheme(value);
-    }
-  };
-
   // Application initiale (chrome.storage → localStorage → CSS)
   applyThemeFromStorage();
-
-  // Réappliquer après que React ait initialisé
-  setTimeout(() => {
-    applyThemeFromStorage();
-  }, 1000);
 })();
