@@ -42,10 +42,13 @@
 
         if (typeof APP_CONFIG !== 'undefined' && APP_CONFIG.DEBUG) console.log("🎨 [Theme Sync] Initial theme loaded:", themeName);
 
-        // Synchroniser vers localStorage pour React
-        isUpdatingTheme = true;
-        localStorage.setItem("user_theme", themeName);
-        isUpdatingTheme = false;
+        // Synchroniser vers localStorage pour React SEULEMENT si nécessaire
+        const currentLocalStorageTheme = localStorage.getItem("user_theme");
+        if (currentLocalStorageTheme !== themeName) {
+          isUpdatingTheme = true;
+          localStorage.setItem("user_theme", themeName);
+          isUpdatingTheme = false;
+        }
 
         // Appliquer les variables CSS
         const root = document.documentElement;
@@ -109,45 +112,36 @@
 
     if (typeof APP_CONFIG !== 'undefined' && APP_CONFIG.DEBUG) console.log("🎨 [Theme Sync] Theme changed in localStorage:", themeName);
 
-    // Synchroniser vers chrome.storage
+    // Synchroniser vers chrome.storage SEULEMENT si la valeur a changé
     if (chrome && chrome.storage) {
-      isUpdatingTheme = true;
-      chrome.storage.local.set({ user_theme: themeName }, () => {
-        if (typeof APP_CONFIG !== 'undefined' && APP_CONFIG.DEBUG) console.log(`🎨 [Theme Sync] Theme "${themeName}" saved to chrome.storage`);
-        isUpdatingTheme = false;
-      });
-    }
-
-    // Appliquer le thème
-    applyThemeOnly(themeName);
-  }
-
-  /**
-   * Écoute les changements dans chrome.storage (depuis la popup)
-   */
-  if (chrome && chrome.storage) {
-    chrome.storage.onChanged.addListener((changes, areaName) => {
-      if (areaName === "local" && changes.user_theme && !isUpdatingTheme) {
-        const oldTheme = changes.user_theme.oldValue;
-        const newTheme = changes.user_theme.newValue;
+      chrome.storage.local.get(['user_theme'], (data) => {
+        const currentTheme = data.user_theme;
         
-        // Ne rien faire si le thème n'a pas vraiment changé
-        if (newTheme && newTheme !== oldTheme) {
-          if (typeof APP_CONFIG !== 'undefined' && APP_CONFIG.DEBUG) console.log("🎨 [Theme Sync] Theme changed from popup:", newTheme);
-          
-          // Mettre à jour localStorage pour React
-          isUpdatingTheme = true;
-          localStorage.setItem("user_theme", newTheme);
-          
-          // Appliquer le thème (sans réécrire dans chrome.storage)
-          applyThemeOnly(newTheme);
-          
-          isUpdatingTheme = false;
+        // Ne rien faire si le thème est déjà le bon
+        if (currentTheme === themeName) {
+          if (typeof APP_CONFIG !== 'undefined' && APP_CONFIG.DEBUG) console.log(`🎨 [Theme Sync] Theme already "${themeName}", skipping storage write`);
+          applyThemeOnly(themeName);
+          return;
         }
-      }
-    });
+        
+        // Écrire seulement si différent
+        isUpdatingTheme = true;
+        chrome.storage.local.set({ user_theme: themeName }, () => {
+          if (typeof APP_CONFIG !== 'undefined' && APP_CONFIG.DEBUG) console.log(`🎨 [Theme Sync] Theme "${themeName}" saved to chrome.storage`);
+          isUpdatingTheme = false;
+        });
+        
+        // Appliquer le thème
+        applyThemeOnly(themeName);
+      });
+    } else {
+      // Pas de chrome.storage, appliquer directement
+      applyThemeOnly(themeName);
+    }
   }
 
   // Application initiale (chrome.storage → localStorage → CSS)
+  // Note: Listener intentionally removed to prevent infinite loops
+  // Theme changes from popup will be reflected on page reload
   applyThemeFromStorage();
 })();
