@@ -1012,7 +1012,7 @@
         // Vérifier si le style existe toujours
         const themeStyle = document.getElementById("mym-theme-style");
         if (!themeStyle) {
-          console.log(`🔄 [MYM Content] Theme style removed, reapplying...`);
+          if (APP_CONFIG.DEBUG) console.log(`🔄 [MYM Content] Theme style removed, reapplying...`);
           applyThemeToCreatorsPage(currentAppliedTheme);
         }
       }
@@ -1027,9 +1027,12 @@
   // Écouter les changements de thème depuis chrome.storage
   chrome.storage.onChanged.addListener((changes, areaName) => {
     if (areaName === 'local' && changes.user_theme) {
+      const oldTheme = changes.user_theme.oldValue;
       const newTheme = changes.user_theme.newValue;
-      console.log(`🎨 [MYM Content] Theme changed in storage: ${changes.user_theme.oldValue} → ${newTheme}`);
-      if (newTheme) {
+      
+      // Ne réappliquer que si le thème a réellement changé
+      if (newTheme && newTheme !== oldTheme && newTheme !== currentAppliedTheme) {
+        if (APP_CONFIG.DEBUG) console.log(`🎨 [MYM Content] Theme changed in storage: ${oldTheme} → ${newTheme}`);
         currentAppliedTheme = newTheme;
         applyThemeToCreatorsPage(newTheme);
       }
