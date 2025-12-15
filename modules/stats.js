@@ -135,38 +135,50 @@
             ${subscriptionBadge}
             <div style="display: flex; gap: 2px; flex: 1;">
               <button class="mym-category-btn" data-category="TW" style="
-                flex: 1; padding: 2px; border: none;
+                flex: 1; padding: 2px; 
+                border: ${userCategory === "TW" ? "2px solid white" : "2px solid transparent"};
                 background: ${
-                  userCategory === "TW" ? "#ef4444" : "rgba(239, 68, 68, 0.3)"
+                  userCategory === "TW" ? "#ef4444" : "rgba(239, 68, 68, 0.2)"
                 };
                 color: white; border-radius: 3px; font-size: 16px; cursor: pointer;
                 box-shadow: ${
-                  userCategory === "TW" ? "0 1px 3px rgba(0,0,0,0.2)" : "none"
+                  userCategory === "TW" ? "0 2px 6px rgba(0,0,0,0.3)" : "none"
                 };
+                transform: ${userCategory === "TW" ? "scale(1.05)" : "scale(1)"};
+                opacity: ${userCategory === "TW" ? "1" : "0.6"};
+                transition: all 0.2s;
               ">⏱️</button>
               <button class="mym-category-btn" data-category="SP" style="
-                flex: 1; padding: 2px; border: none;
+                flex: 1; padding: 2px;
+                border: ${userCategory === "SP" ? "2px solid white" : "2px solid transparent"};
                 background: ${
-                  userCategory === "SP" ? "#10b981" : "rgba(16, 185, 129, 0.3)"
+                  userCategory === "SP" ? "#10b981" : "rgba(16, 185, 129, 0.2)"
                 };
                 color: white; border-radius: 3px; font-size: 16px; cursor: pointer;
                 box-shadow: ${
-                  userCategory === "SP" ? "0 1px 3px rgba(0,0,0,0.2)" : "none"
+                  userCategory === "SP" ? "0 2px 6px rgba(0,0,0,0.3)" : "none"
                 };
+                transform: ${userCategory === "SP" ? "scale(1.05)" : "scale(1)"};
+                opacity: ${userCategory === "SP" ? "1" : "0.6"};
+                transition: all 0.2s;
               ">💰</button>
               <button class="mym-category-btn" data-category="Whale" style="
-                flex: 1; padding: 2px; border: none;
+                flex: 1; padding: 2px;
+                border: ${userCategory === "Whale" ? "2px solid white" : "2px solid transparent"};
                 background: ${
                   userCategory === "Whale"
                     ? "#3b82f6"
-                    : "rgba(59, 130, 246, 0.3)"
+                    : "rgba(59, 130, 246, 0.2)"
                 };
                 color: white; border-radius: 3px; font-size: 16px; cursor: pointer;
                 box-shadow: ${
                   userCategory === "Whale"
-                    ? "0 1px 3px rgba(0,0,0,0.2)"
+                    ? "0 2px 6px rgba(0,0,0,0.3)"
                     : "none"
                 };
+                transform: ${userCategory === "Whale" ? "scale(1.05)" : "scale(1)"};
+                opacity: ${userCategory === "Whale" ? "1" : "0.6"};
+                transition: all 0.2s;
               ">🐋</button>
             </div>
           </div>
