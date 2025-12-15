@@ -674,10 +674,10 @@
 
     // Injecter la liste si on est sur une page de chat
     if (window.location.pathname.startsWith("/app/chat/")) {
-      console.log("✅ [MYM Conversations] On chat page, injecting list in 2s...");
+      if (APP_CONFIG.DEBUG) console.log("✅ [MYM Conversations] On chat page, injecting list in 2s...");
       setTimeout(injectConversationsInAside, 2000);
     } else {
-      console.log("ℹ️ [MYM Conversations] Not on chat page, skipping injection");
+      if (APP_CONFIG.DEBUG) console.log("ℹ️ [MYM Conversations] Not on chat page, skipping injection");
     }
 
     // Observer la navigation
