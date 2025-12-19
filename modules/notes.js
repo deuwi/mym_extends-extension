@@ -16,9 +16,9 @@
     if (window.location.pathname !== "/app/myms") return;
 
     const userRows = document.querySelectorAll(".page.my-myms .list__row");
-    // console.log(
-    //   `📝 [MYM Notes] Found ${userRows.length} user rows on /app/myms`
-    // );
+    if (APP_CONFIG.DEBUG) console.log(
+      `📝 [MYM Notes] Found ${userRows.length} user rows on /app/myms`
+    );
 
     userRows.forEach((row) => {
       const rightSection = row.querySelector(".list__row__right");
@@ -58,6 +58,45 @@
       // Insert before the arrow link
       rightSection.insertBefore(notesBtn, chatLink);
     });
+  }
+
+  /**
+   * Observe new rows added to the DOM (for infinite scroll on /app/myms)
+   */
+  function observeNewRowsForNotes() {
+    const debouncedInject = debounce(() => {
+      if (APP_CONFIG.DEBUG) console.log("🔄 [MYM Notes] Injecting buttons for new rows after DOM change");
+      injectNotesButtonsInList();
+    }, 300);
+
+    const observer = new MutationObserver((mutations) => {
+      let needsInject = false;
+
+      mutations.forEach((mutation) => {
+        mutation.addedNodes.forEach((node) => {
+          if (node.nodeType === 1) {
+            if (node.classList?.contains("list__row")) {
+              needsInject = true;
+            } else if (node.querySelector?.(".list__row")) {
+              needsInject = true;
+            }
+          }
+        });
+      });
+
+      if (needsInject) {
+        debouncedInject();
+      }
+    });
+
+    // Observe the page container for /app/myms
+    const pageContainer = document.querySelector(".page.my-myms") || document.body;
+    observer.observe(pageContainer, {
+      childList: true,
+      subtree: true,
+    });
+
+    if (APP_CONFIG.DEBUG) console.log("👀 [MYM Notes] MutationObserver started for new rows");
   }
 
   /**
@@ -831,6 +870,7 @@
     initNotesSystem,
     injectNotesButtonsInList,
     openNotesForUser,
+    observeNewRowsForNotes,
   };
 
   if (APP_CONFIG.DEBUG) console.log("✅ [MYM Notes] Module loaded");

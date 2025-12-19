@@ -7,7 +7,7 @@ if (typeof globalThis.APP_CONFIG === 'undefined') {
   // Fallback pour Chrome service worker si config.js n'est pas chargé
   globalThis.APP_CONFIG = {
     DEBUG: false,
-    API_BASE: "https://mymchat.fr/api",
+    API_BASE: "https://chat4creators.fr/api",
     POLL_INTERVAL_MS: 10000,
     SUBSCRIPTION_CHECK_INTERVAL: 5 * 60 * 1000,
     USER_INFO_CACHE_DURATION: 2 * 60 * 1000,
@@ -63,7 +63,7 @@ try {
 
 const API_BASE =
   (globalThis.APP_CONFIG && globalThis.APP_CONFIG.API_BASE) ||
-  "https://mymchat.fr/api";
+  "https://chat4creators.fr/api";
 const TOKEN_MAX_AGE =
   (globalThis.APP_CONFIG && globalThis.APP_CONFIG.TOKEN_MAX_AGE) ||
   365 * 24 * 60 * 60 * 1000;
@@ -775,7 +775,7 @@ async function checkAndEnableFeatures() {
   try {
     const API_BASE =
       (globalThis.APP_CONFIG && globalThis.APP_CONFIG.API_BASE) ||
-      "https://mymchat.fr/api";
+      "https://chat4creators.fr/api";
     const isLocal =
       (globalThis.APP_CONFIG && globalThis.APP_CONFIG.ENVIRONMENT) === "local";
 

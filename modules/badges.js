@@ -620,6 +620,45 @@
     if (APP_CONFIG.DEBUG) console.log(`🧹 [MYM Badges] Caches cleared`);
   }
 
+  /**
+   * Observe new rows added to the DOM (for infinite scroll on /app/myms)
+   */
+  function observeNewRowsForBadges() {
+    const debouncedScan = contentAPI.debounce(() => {
+      if (APP_CONFIG.DEBUG) console.log("🔄 [MYM Badges] Scanning for new rows after DOM change");
+      scanExistingListsForBadges();
+    }, 300);
+
+    const observer = new MutationObserver((mutations) => {
+      let needsScan = false;
+
+      mutations.forEach((mutation) => {
+        mutation.addedNodes.forEach((node) => {
+          if (node.nodeType === 1) {
+            if (node.classList?.contains("list__row")) {
+              needsScan = true;
+            } else if (node.querySelector?.(".list__row")) {
+              needsScan = true;
+            }
+          }
+        });
+      });
+
+      if (needsScan) {
+        debouncedScan();
+      }
+    });
+
+    // Observe the page container for /app/myms
+    const pageContainer = document.querySelector(".page.my-myms") || document.body;
+    observer.observe(pageContainer, {
+      childList: true,
+      subtree: true,
+    });
+
+    if (APP_CONFIG.DEBUG) console.log("👀 [MYM Badges] MutationObserver started for new rows");
+  }
+
   // Export des fonctions publiques
   contentAPI.badges = {
     fetchUserDetailedInfo,
@@ -628,6 +667,7 @@
     scanSingleCard,
     removeBadgesUI,
     clearBadgeCaches,
+    observeNewRowsForBadges,
   };
 
   if (APP_CONFIG.DEBUG) console.log("✅ [MYM Badges] Module loaded");

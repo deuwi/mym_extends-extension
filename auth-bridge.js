@@ -33,7 +33,7 @@ if (isExtensionLogin) {
               const error = chrome.runtime.lastError.message;
               if (error.includes("Extension context invalidated")) {
                 console.warn("⚠️ Extension rechargée, veuillez vous reconnecter");
-                window.location.href = "https://mymchat.fr/signin?redirect=extension";
+                window.location.href = "https://chat4creators.fr/signin?redirect=extension";
                 return;
               }
               console.error("❌ Error sending token:", error);
@@ -45,7 +45,7 @@ if (isExtensionLogin) {
       } catch (err) {
         if (err.message && err.message.includes("Extension context invalidated")) {
           console.warn("⚠️ Extension rechargée, veuillez vous reconnecter");
-          window.location.href = "https://mymchat.fr/signin?redirect=extension";
+          window.location.href = "https://chat4creators.fr/signin?redirect=extension";
         } else {
           console.error("❌ Error sending message:", err);
         }
@@ -117,7 +117,7 @@ if (isExtensionLogin) {
               const error = chrome.runtime.lastError.message;
               if (error.includes("Extension context invalidated")) {
                 console.warn("⚠️ Extension rechargée, veuillez vous reconnecter");
-                window.location.href = "https://mymchat.fr/signin?redirect=extension";
+                window.location.href = "https://chat4creators.fr/signin?redirect=extension";
                 return;
               }
               console.error("❌ Auth Bridge: Error sending message:", error);
@@ -134,7 +134,7 @@ if (isExtensionLogin) {
       } catch (err) {
         if (err.message && err.message.includes("Extension context invalidated")) {
           console.warn("⚠️ Extension rechargée, veuillez vous reconnecter");
-          window.location.href = "https://mymchat.fr/signin?redirect=extension";
+          window.location.href = "https://chat4creators.fr/signin?redirect=extension";
         } else {
           console.error("❌ Error sending message:", err);
         }

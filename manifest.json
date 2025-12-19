@@ -1,13 +1,13 @@
 {
   "manifest_version": 3,
-  "name": "MYM Chat Live",
-  "version": "2.0.9",
+  "name": "Chat4Creators",
+  "version": "1.0.1",
   "description": "Extension pour créateurs MYM.fans - Chat Live amélioré, Badges revenus, Emoji Picker, Notes. Essai gratuit 7 jours.",
   "permissions": ["storage", "alarms"],
   "host_permissions": [
     "https://creators.mym.fans/*",
     "https://mym.fans/*",
-    "https://mymchat.fr/*"
+    "https://chat4creators.fr/*"
   ],
   "background": {
     "service_worker": "background.js",
@@ -54,15 +54,15 @@
     },
     {
       "matches": [
-        "https://mymchat.fr/*signin*",
-        "https://mymchat.fr/*login*"
+        "https://chat4creators.fr/*signin*",
+        "https://chat4creators.fr/*login*"
       ],
       "js": ["config.js", "auth-bridge.js"],
       "run_at": "document_idle"
     },
     {
       "matches": [
-        "https://mymchat.fr/*"
+        "https://chat4creators.fr/*"
       ],
       "js": ["theme-sync.js"],
       "run_at": "document_start"

@@ -62,16 +62,16 @@ npm run lint:logs             # Verify completion
 - Extended `APP_CONFIG` with all URL constants:
   - `API_BASE`: `https://mymchat.fr`
   - `FRONTEND_URL`: `https://mymchat.fr`
-  - `SIGNIN_URL`: `https://mymchat.fr/auth/signin`
+  - `SIGNIN_URL`: `https://chat4creators.fr/auth/signin`
   - `CREATORS_URL`: `https://creators.mym.fans` (new)
-  - `PRICING_URL`: `https://mymchat.fr/pricing` (new)
+  - `PRICING_URL`: `https://chat4creators.fr/pricing` (new)
 - Single source of truth for all endpoints
 - JSDoc documentation added
 
 **Usage:**
 ```javascript
 // ❌ Before
-const url = 'https://mymchat.fr/api/endpoint';
+const url = 'https://chat4creators.fr/api/endpoint';
 
 // ✅ After
 const url = `${APP_CONFIG.API_BASE}/endpoint`;
@@ -179,9 +179,9 @@ npm run format        # Prettier
 ```javascript
 const CONFIG = {
   production: {
-    API_BASE: "https://mymchat.fr/api",
+    API_BASE: "https://chat4creators.fr/api",
     FRONTEND_URL: "https://mymchat.fr",
-    SIGNIN_URL: "https://mymchat.fr/signin",
+    SIGNIN_URL: "https://chat4creators.fr/signin",
   },
 };
 ```
@@ -194,11 +194,11 @@ const CONFIG = {
  */
 const CONFIG = {
   production: {
-    API_BASE: "https://mymchat.fr/api",
+    API_BASE: "https://chat4creators.fr/api",
     FRONTEND_URL: "https://mymchat.fr",
-    SIGNIN_URL: "https://mymchat.fr/signin",
+    SIGNIN_URL: "https://chat4creators.fr/signin",
     CREATORS_URL: "https://creators.mym.fans",
-    PRICING_URL: "https://mymchat.fr/pricing",
+    PRICING_URL: "https://chat4creators.fr/pricing",
   },
 };
 

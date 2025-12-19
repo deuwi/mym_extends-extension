@@ -2,7 +2,7 @@
 (function (contentAPI) {
   "use strict";
 
-  const API_BASE = contentAPI.API_BASE || "https://mymchat.fr/api";
+  const API_BASE = contentAPI.API_BASE || "https://chat4creators.fr/api";
 
   /**
    * Retry logic with exponential backoff

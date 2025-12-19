@@ -18,129 +18,9 @@
     const style = document.createElement("style");
     style.id = "mym-live-style";
     style.textContent = `
+      /* Animation pour l'apparition des éléments */
       .mym-live-anim{animation: mym-appear 700ms ease both}
       @keyframes mym-appear{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
-      
-      /* Fix scroll comportment pour discussions */
-      html, body {
-        overflow: hidden !important;
-        height: 100%;
-        margin: 0;
-        padding: 0;
-      }
-      
-      .main.main-discussions {
-        display: flex;
-        flex-direction: column;
-        height: 100vh;
-        overflow: hidden;
-        height: calc(100vh - 100px);
-      }
-      
-      .content-body {
-        display: flex;
-        flex-direction: column;
-        flex: 1;
-        min-height: 0;
-        overflow: hidden;
-      }
-      
-      .discussions {
-        display: flex;
-        flex-direction: column;
-        flex: 1;
-        min-height: 0;
-        max-height: calc(100vh - 173px);
-        overflow: hidden;
-        height: calc(100vh - 173px) !important;
-      }
-      
-      .discussions__chats {
-        flex: 1;
-        overflow-y: auto;
-        overflow-x: hidden;
-        min-height: 0;
-      }
-      
-      aside.sidebar {
-        justify-content: flex-start !important;
-      }
-      
-      /* Fix margin for navigation links in list rows */
-      .link.link--default.link--icon-after {
-        margin-top: 0 !important;
-      }
-      
-      /* Make /app/myms page list scrollable with max height */
-      .page.my-myms {
-        height: 80vh !important;
-        overflow-y: auto !important;
-        overflow-x: hidden !important;
-      }
-      
-      /* Désactivation du hover sur list__row UNIQUEMENT dans le main (pas dans la sidebar) */
-      .main .list__row {
-        cursor: default !important;
-      }
-      
-      /* Les lignes dans la sidebar restent cliquables */
-      aside.sidebar .list__row {
-        cursor: pointer !important;
-      }
-      
-      /* Effet hover sur les lignes de conversation - page /app/myms */
-      .page.my-myms .list__row {
-        transition: all 0.2s ease;
-      }
-      
-      .page.my-myms .list__row:hover {
-        background: rgba(102, 126, 234, 0.08) !important;
-        transform: translateX(4px);
-      }
-      
-      /* Effet hover sur les lignes de conversation - liste injectée (sidebar) */
-      aside.sidebar .list__row {
-        transition: all 0.2s ease;
-      }
-      
-      aside.sidebar .list__row:hover {
-        background: rgba(102, 126, 234, 0.08) !important;
-        transform: translateX(4px);
-      }
-      
-      .list__row .link--icon-after svg {
-        display: none !important;
-      }
-      
-      /* Remove horizontal scroll from conversations list */
-      .mym-conversations-list {
-        overflow-x: hidden !important;
-      }
-      
-      .mym-conversations-list .list__row {
-        max-width: 100% !important;
-        overflow: hidden !important;
-      }
-      
-      /* Remove scroll from followers details and add to site-content */
-      .followers__details {
-        height: auto !important;
-        overflow-y: visible !important;
-        width: 100% !important;
-        padding: 0 !important;
-      }
-      
-      .site-content {
-        overflow-y: auto !important;
-        max-height: 100vh !important;
-      }
-      
-      /* Mobile responsive - reduce padding bottom on discussions */
-      @media (max-width: 768px) {
-        .discussions__chats.discussions__chats--creators {
-          padding-bottom: 100px !important;
-        }
-      }
     `;
     document.head.appendChild(style);
   })();
@@ -242,7 +122,7 @@
     removeAllDetails();
 
     // Watch for new details tags - observer uniquement le main content
-    const mainContent = document.querySelector('.site-content, main, .main');
+    const mainContent = document.querySelector('.site-content, .page .my-myms');
     if (mainContent) {
       const observer = new MutationObserver(() => {
         removeAllDetails();
@@ -412,7 +292,7 @@
     // Créer le message de manière sécurisée
     const message = document.createTextNode("⚠️ Votre abonnement MYM Chat Live Injector a expiré. ");
     const link = document.createElement("a");
-    link.href = "https://mymchat.fr/pricing";
+    link.href = "https://chat4creators.fr/pricing";
     link.target = "_blank";
     link.style.cssText = "color: white; text-decoration: underline; margin-left: 10px;";
     link.textContent = "Renouveler maintenant";
@@ -503,6 +383,13 @@
       setTimeout(() => {
         contentAPI.badges.scanExistingListsForBadges();
       }, 1000);
+      
+      // Start observer for dynamically loaded rows (infinite scroll on /app/myms)
+      if (window.location.pathname === "/app/myms" && contentAPI.badges.observeNewRowsForBadges) {
+        setTimeout(() => {
+          contentAPI.badges.observeNewRowsForBadges();
+        }, 1500);
+      }
     }
 
     // Initialize emoji picker
@@ -578,6 +465,13 @@
           childList: true,
           subtree: true,
         });
+      }
+      
+      // Start observer for dynamically loaded rows (infinite scroll on /app/myms)
+      if (window.location.pathname === "/app/myms" && contentAPI.notes.observeNewRowsForNotes) {
+        setTimeout(() => {
+          contentAPI.notes.observeNewRowsForNotes();
+        }, 1500);
       }
     } else {
     }

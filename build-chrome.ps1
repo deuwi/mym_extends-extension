@@ -68,7 +68,7 @@ Write-Host "Package location: $buildDir" -ForegroundColor Cyan
 # ======== ZIP SOURCE (Non minifié) ========
 Write-Host ""
 Write-Host "Creating source .zip (non-minified)..." -ForegroundColor Cyan
-$zipPathSource = "mym-chat-live-chrome-source.zip"
+$zipPathSource = "chat4creators-chrome-source.zip"
 if (Test-Path $zipPathSource) {
     Remove-Item $zipPathSource -Force
 }
@@ -86,7 +86,7 @@ if ($LASTEXITCODE -ne 0) {
 # ======== ZIP MINIFIÉ ========
 Write-Host ""
 Write-Host "Creating minified .zip for Chrome Web Store..." -ForegroundColor Cyan
-$zipPath = "mym-chat-live-chrome.zip"
+$zipPath = "chat4creators-chrome.zip"
 if (Test-Path $zipPath) {
     Remove-Item $zipPath -Force
 }

@@ -1,9 +1,9 @@
 // popup.js - Direct login authentication (no pairing codes)
 (function () {
-  const API_BASE = window.APP_CONFIG?.API_BASE || "https://mymchat.fr";
+  const API_BASE = window.APP_CONFIG?.API_BASE || "https://chat4creators.fr";
   const SIGNIN_URL =
-    window.APP_CONFIG?.SIGNIN_URL || "https://mymchat.fr/signin";
-  const FRONTEND_URL = window.APP_CONFIG?.FRONTEND_URL || "https://mymchat.fr";
+    window.APP_CONFIG?.SIGNIN_URL || "https://chat4creators.fr/signin";
+  const FRONTEND_URL = window.APP_CONFIG?.FRONTEND_URL || "https://chat4creators.fr";
   const TOKEN_MAX_AGE =
     window.APP_CONFIG?.TOKEN_MAX_AGE || 365 * 24 * 60 * 60 * 1000;
 
@@ -606,7 +606,7 @@
         });
 
         // Déconnecter du site mymchat.fr en supprimant les cookies de session
-        const cookieDomains = ["mymchat.fr", ".mymchat.fr"];
+        const cookieDomains = ["chat4creators.fr", ".chat4creators.fr"];
         let totalCookiesRemoved = 0;
 
         if (chrome.cookies && chrome.cookies.getAll) {
@@ -614,7 +614,7 @@
             chrome.cookies.getAll({ domain: domain }, (cookies) => {
               const safeCookies = cookies || [];
               safeCookies.forEach((cookie) => {
-                const url = `https://mymchat.fr${cookie.path}`;
+                const url = `https://chat4creators.fr${cookie.path}`;
                 chrome.cookies.remove(
                   {
                     url: url,
@@ -633,10 +633,10 @@
         }
 
         setTimeout(() => {
-          if (APP_CONFIG.DEBUG) console.log(`🍪 Total: ${totalCookiesRemoved} cookie(s) mymchat.fr supprimé(s)`);
+          if (APP_CONFIG.DEBUG) console.log(`🍪 Total: ${totalCookiesRemoved} cookie(s) chat4creators.fr supprimé(s)`);
           
           // Recharger les onglets mymchat.fr pour appliquer la déconnexion
-          chrome.tabs.query({ url: "*://mymchat.fr/*" }, (tabs) => {
+          chrome.tabs.query({ url: "*://chat4creators.fr/*" }, (tabs) => {
             tabs.forEach((tab) => {
               chrome.tabs.reload(tab.id);
             });
@@ -651,7 +651,7 @@
     // Ouvrir un onglet pour l'authentification
     chrome.tabs.create({
       url:
-        (window.APP_CONFIG?.SIGNIN_URL || "https://mymchat.fr/signin") +
+        (window.APP_CONFIG?.SIGNIN_URL || "https://chat4creators.fr/signin") +
         "?redirect=extension",
     });
 

@@ -23,11 +23,11 @@ const CONFIG = {
     PRICING_URL: "http://localhost:5173/pricing",
   },
   production: {
-    API_BASE: "https://mymchat.fr/api",
-    FRONTEND_URL: "https://mymchat.fr",
-    SIGNIN_URL: "https://mymchat.fr/signin",
+    API_BASE: "https://chat4creators.fr/api",
+    FRONTEND_URL: "https://chat4creators.fr",
+    SIGNIN_URL: "https://chat4creators.fr/signin",
     CREATORS_URL: "https://creators.mym.fans",
-    PRICING_URL: "https://mymchat.fr/pricing",
+    PRICING_URL: "https://chat4creators.fr/pricing",
   },
 };
 

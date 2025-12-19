@@ -66,7 +66,7 @@
         ? `https://creators.mym.fans/app/myms?search=${encodeURIComponent(
             searchQuery
           )}`
-        : "https://creators.mym.fans/app/myms";
+        : "https://creators.mym.fans/app/myms?tab=unread";
 
       if (searchQuery) {
         if (APP_CONFIG.DEBUG) console.log(`🔍 [MYM Conversations] Searching for: "${searchQuery}"`);
@@ -527,12 +527,18 @@
     listContainer.style.cssText = `
       overflow-y: auto;
       overflow-x: hidden;
-      max-height: calc(100vh - 400px);
-      padding: 10px 0;
+      max-height: 500px;
+      padding: 10px 0 150px 0;
       direction: rtl;
       scrollbar-width: thin;
       scrollbar-color: linear-gradient(135deg, #667eea 0%, #764ba2 100%) #1a1d2e;
     `;
+    
+    // Adaptation pour petits écrans
+    if (window.innerHeight < 800) {
+      listContainer.style.maxHeight = '400px';
+      listContainer.style.paddingBottom = '180px';
+    }
     
     // Ajouter les styles de scrollbar pour WebKit (Chrome, Edge, Safari)
     contentAPI.injectStyles('mym-conversations-scrollbar-style', `
@@ -751,7 +757,6 @@
         display: flex;
         align-items: center;
         justify-content: center;
-        border-radius: 50%;
         transition: all 0.2s;
         border: none !important;
       `;

@@ -21,7 +21,7 @@
     (window.APP_CONFIG && window.APP_CONFIG.MAX_PAGES_FETCH) || 10;
   API.API_BASE =
     (globalThis.APP_CONFIG && globalThis.APP_CONFIG.API_BASE) ||
-    "https://mymchat.fr/api";
+    "https://chat4creators.fr/api";
 
   // Feature flags (will be updated by chrome.storage listeners)
   API.badgesEnabled = true;

@@ -77,12 +77,12 @@ Write-Host ""
 Write-Host "Creating source .zip (non-minified)..." -ForegroundColor Yellow
 
 # Supprimer l'ancien zip s'il existe
-if (Test-Path "mym-chat-live-firefox-source.zip") {
-    Remove-Item "mym-chat-live-firefox-source.zip"
+if (Test-Path "chat4creators-firefox-source.zip") {
+    Remove-Item "chat4creators-firefox-source.zip"
 }
 
 # Créer le zip SOURCE DEPUIS le dossier build-firefox avec paths Unix (/)
-$outputZipSource = Join-Path $PWD "mym-chat-live-firefox-source.zip"
+$outputZipSource = Join-Path $PWD "chat4creators-firefox-source.zip"
 
 # Supprimer l'ancien zip
 if (Test-Path $outputZipSource) {
@@ -110,7 +110,7 @@ try {
     $zipSource.Dispose()
 }
 
-Write-Host "Source ZIP created: mym-chat-live-firefox-source.zip" -ForegroundColor Green
+Write-Host "Source ZIP created: chat4creators-firefox-source.zip" -ForegroundColor Green
 
 # ======== MINIFICATION ========
 Write-Host ""
@@ -125,13 +125,13 @@ Write-Host ""
 Write-Host "Creating minified .zip for Firefox Add-ons..." -ForegroundColor Yellow
 
 # Supprimer l'ancien zip s'il existe
-if (Test-Path "mym-chat-live-firefox.zip") {
-    Remove-Item "mym-chat-live-firefox.zip"
+if (Test-Path "chat4creators-firefox.zip") {
+    Remove-Item "chat4creators-firefox.zip"
 }
 
 # Créer le zip DEPUIS le dossier build-firefox avec paths Unix (/)
 # Firefox Add-ons exige OBLIGATOIREMENT des forward slashes
-$outputZip = Join-Path $PWD "mym-chat-live-firefox.zip"
+$outputZip = Join-Path $PWD "chat4creators-firefox.zip"
 
 # Supprimer l'ancien zip
 if (Test-Path $outputZip) {
@@ -159,14 +159,14 @@ try {
     $zip.Dispose()
 }
 
-Write-Host "ZIP created: mym-chat-live-firefox.zip" -ForegroundColor Green
+Write-Host "ZIP created: chat4creators-firefox.zip" -ForegroundColor Green
 Write-Host ""
 Write-Host "Build summary:" -ForegroundColor Cyan
-Write-Host "  - Source (non-minified): mym-chat-live-firefox-source.zip" -ForegroundColor White
-Write-Host "  - Production (minified): mym-chat-live-firefox.zip" -ForegroundColor White
+Write-Host "  - Source (non-minified): chat4creators-firefox-source.zip" -ForegroundColor White
+Write-Host "  - Production (minified): chat4creators-firefox.zip" -ForegroundColor White
 Write-Host ""
 Write-Host "Next steps:" -ForegroundColor Yellow
 Write-Host "  1. Go to https://addons.mozilla.org/developers/" -ForegroundColor White
 Write-Host "  2. Click Submit a New Add-on" -ForegroundColor White
-Write-Host "  3. Upload mym-chat-live-firefox.zip (minified)" -ForegroundColor White
-Write-Host "  4. Attach mym-chat-live-firefox-source.zip as source code" -ForegroundColor White
+Write-Host "  3. Upload chat4creators-firefox.zip (minified)" -ForegroundColor White
+Write-Host "  4. Attach chat4creators-firefox-source.zip as source code" -ForegroundColor White
